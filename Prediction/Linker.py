@@ -8,6 +8,7 @@ from datetime import timedelta, datetime
 
 from gensim.corpora import Dictionary
 from gensim.models import TfidfModel
+from github import Github
 
 from Prediction.feature_generation import generate_features
 from Prediction.gitScraper import clone_git_repo_to_tmp, get_all_commit_hashes, process_a_commit
@@ -15,6 +16,7 @@ from Prediction.training_utils import train_classifier, generate_training_data, 
     generate_tfidf, update, inflate_events, generate_batches, null_issue, flatten_events
 from Util import utils_
 from Util.ReservedKeywords import java_reserved, c_reserved, cpp_reserved, javascript_reserved, python_reserved
+from Util.github_api_methods import parse_pr_ref, parse_issue_ref
 from gitMine.VCClasses import IssueStates, Commit, Issue
 
 stopwords = utils_.GitMineUtils.STOPWORDS \
@@ -154,10 +156,38 @@ class Linker(object):
         return scores
 
     def update_from_github(self, since):
-        # TODO: Get all new entities from <since> and push them through update
-        pass
+        """
+        Update the PR and Issue internal state of the backend using the GitHub REST API
+        :param since: Only issues updated at or after this time are returned.
+                      This is a timestamp in ISO 8601 format: YYYY-MM-DDTHH:MM:SSZ.
+        """
+        gh = Github()
+        repo = gh.get_repo(self.repository_obj.name)
+        pr_numbers = [pr.number for pr in self.repository_obj.prs]
+        issue_ids = [issue.id_ for issue in self.repository_obj.issues]
+        for pr_ref in repo.get_pulls(state='all'):
+            if pr_ref.number in pr_numbers:
+                break
+            pr = parse_pr_ref(pr_ref, self.repository_obj.name)
+            self.repository_obj.prs.append(pr)
+        for issue_ref in repo.get_issues(state='all', since=since):
+            issue = parse_issue_ref(issue_ref)
+            if issue.id_ in issue_ids:
+                for comment in issue.replies:
+                    update(comment, self.repository_obj.issues)
+                for state in issue.states:
+                    update(state, self.repository_obj.issues)
+                for commit in issue.commits:
+                    update(commit, self.repository_obj.issues)
+            else:
+                self.repository_obj.issues.append(issue)
 
     def update_from_local_git(self, git_location, since_sha):
+        """
+        Update the internal state of the commits in the backend using the local git repository.
+        :param git_location: Location in the filesystem where the git repository is located
+        :param since_sha: The sha after which we wish to update
+        """
         repo_name = self.repository_obj.name
         hashes = get_all_commit_hashes(git_location)
         hashes = hashes[hashes.index(since_sha):]
@@ -177,6 +207,9 @@ class Linker(object):
             self.truth[link[0]] = [link[0]]
 
     def trim_truth(self):
+        """
+        Method to remove ground truth data regarding entities that no longer exist in the internal representation.
+        """
         issue_ids = [i.id_ for i in self.repository_obj.issues]
         temp = dict()
         for issue_id in self.truth.keys():
