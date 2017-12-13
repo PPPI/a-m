@@ -2,7 +2,7 @@ from datetime import datetime
 
 from github import Github
 
-from gitMine.VCClasses import Comment, Commit, IssueStates, PullRequest
+from gitMine.VCClasses import Comment, Commit, IssueStates, PullRequest, Issue, StateChange
 
 
 def parse_comment_ref(comment_ref):
@@ -74,8 +74,60 @@ def parse_pr_ref(pr_ref, project):
                        labels=labels, state=state, title=pr_ref.title)
 
 
+def parse_event(event_ref):
+    timestamp = event_ref.created_at
+    by = event_ref.actor.login
+    if event_ref.event == 'referenced':
+        return event_ref.commit_id
+    elif event_ref.event == 'closed':
+        return StateChange(from_=IssueStates.open, to_=IssueStates.closed, by=by,
+                           timestamp=timestamp, commit=event_ref.commit_id)
+    elif event_ref.event == 'reopened':
+        return StateChange(from_=IssueStates.closed, to_=IssueStates.open, by=by,
+                           timestamp=timestamp, commit=event_ref.commit_id)
+    elif (event_ref.event == 'merged') or (event_ref.event == 'marked_as_duplicate'):
+        return StateChange(from_=IssueStates.open, to_=IssueStates.merged, by=by,
+                           timestamp=timestamp, commit=event_ref.commit_id)
+
+
+def parse_issue_ref(issue_ref):
+    op = Comment(author=issue_ref.user.login, id_='issuecomment_%d' % issue_ref.number,
+                 body=issue_ref.body, timestamp=issue_ref.created_at)
+    issue = Issue(assignee=issue_ref.assignee.login if issue_ref.assignee else None,
+                  id_=issue_ref.number, original_post=op, repository=issue_ref.repository.full_name,
+                  title=issue_ref.title)
+    replies = list()
+    for comment_ref in issue_ref.get_comments():
+        replies.append(parse_comment_ref(comment_ref))
+    issue.add_replies(replies)
+    labels = list()
+    for label_ref in issue_ref.get_labels():
+        label_ = parse_label_ref(label_ref)
+        if label_:
+            labels.append(label_)
+    issue.add_labels(labels)
+
+    states = list()
+    commits = set()
+    for event_ref in issue_ref.get_events():
+        event = parse_event(event_ref)
+        if isinstance(event, StateChange):
+            states.append(event)
+            if event.commit:
+                commits.add(event.commit)
+        elif event:
+            commits.add(event)
+    issue.add_states(states)
+    issue.add_commits(commits)
+    return issue
+
+
 if __name__ == '__main__':
     gh = Github()
     repo_ref = gh.get_repo('google/guava')
     pr_ref = repo_ref.get_pull(2825)
     pr = parse_pr_ref(pr_ref, 'google_guava')
+    print(pr)
+    issue_ref = repo_ref.get_issue(2509)
+    issue = parse_issue_ref(issue_ref)
+    print(issue)
