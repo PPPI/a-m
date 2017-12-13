@@ -21,7 +21,7 @@ with SimpleXMLRPCServer(("localhost", 8000), requestHandler=RequestHandler) as s
     for model in models:
         linkers[model] = Linker.load_from_disk(os.path.join(os.curdir, 'models', model))
     server.register_introspection_functions()
-    gh = Github('PPPI', '')
+    gh = Github()
     # Get lazy references to the projects on GitHub, will use to keep local models up to date
     # TODO: Forgetting acquired information
     projects = {model: gh.get_repo(model.replace('_', '/')) for model in models}
