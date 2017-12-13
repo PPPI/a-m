@@ -1,0 +1,9 @@
+{
+  "name": "linker",
+  "description": "Linker headless server to be used with the Chrome extension",
+  "path": "__main__.bat",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://mbmihinlepjplkoeiamcheofcbdkejcm/"
+  ]
+}

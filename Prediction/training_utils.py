@@ -1,0 +1,267 @@
+from multiprocessing.pool import Pool
+from random import shuffle
+
+import multiprocessing
+import numpy as np
+
+from datetime import datetime, timedelta
+from typing import List, Tuple, Union, Set, Dict
+
+from gensim.corpora import Dictionary
+from gensim.models import tfidfmodel
+from sklearn.ensemble import RandomForestClassifier
+
+from Prediction.feature_generation import generate_features
+from Prediction.named_tuple_util import link_datapoint
+from Prediction.text_utils import text_pipeline
+from gitMine.VCClasses import Repository, Commit, Comment, StateChange, Reference, Issue, PullRequest, IssueStates
+
+null_issue = Issue(assignee='', id_='null_issue', original_post=Comment(author='', body='', id_='null_comment',
+                                                                        timestamp=None), repository='', title='')
+null_issue.commits = set()
+
+null_pr = PullRequest(number='null_pr', title='', assignee='', comments=list(), commits=list(), diffs=list(),
+                      from_branch='', to_branch='', from_repo='', labels=list(), state=IssueStates.open, to_repo='')
+
+
+# The property that the first element of the tuple has is '.timestamp'
+def flatten_events(repo_: Repository) \
+        -> List[Tuple[Union[Commit, Comment, StateChange, Reference], Union[Commit, Issue, PullRequest]]]:
+    if repo_.prs is None:
+        repo_.prs = list()
+
+    if repo_.issues is None:
+        repo_.issues = list()
+
+    if repo_.commits is None:
+        repo_.commits = list()
+
+    result = [(c, c) for c in repo_.commits]
+    result += [(comment, i) for i in repo_.issues for comment in [i.original_post] + i.replies]
+    result += [(states, i) for i in repo_.issues for states in i.states]
+    result += [(action, i) for i in repo_.issues for action in i.actions if isinstance(action, Reference)]
+    result += [(comment, pr) for pr in repo_.prs for comment in pr.comments]
+    result += [(commit, pr) for pr in repo_.prs for commit in pr.commits]
+    result = sorted(result, key=lambda e: e[0].timestamp)
+    return result
+
+
+def filter_flat_events_by_time(
+        events: List[Tuple[Union[Commit, Comment, StateChange, Reference], Union[Commit, Issue, PullRequest]]],
+        start: datetime.timestamp,
+        end: datetime.timestamp) \
+        -> List[Tuple[Union[Commit, Comment, StateChange, Reference], Union[Commit, Issue, PullRequest]]]:
+    return [p for p in events if start <= p[0].timestamp <= end]
+
+
+def update(event: Tuple[Union[Comment, StateChange, Reference], Union[Issue, PullRequest]],
+           list_: List[Union[Issue, PullRequest]]) -> List[Union[Issue, PullRequest]]:
+    event_id = event[1].id_ if isinstance(event[1], Issue) else event[1].number
+    for elem in list_:
+        id_ = elem.id_ if isinstance(elem, Issue) else elem.number
+        if id_ == event_id:
+            if isinstance(event[0], Comment):
+                elem.replies.append(event[0]) if isinstance(elem, Issue) else elem.comments.append(event[0])
+            elif isinstance(event[0], StateChange):
+                elem.states.append(event[0])
+            elif isinstance(event[0], Reference):
+                elem.actions.append(event[0])
+            elif isinstance(event[0], Commit):
+                elem.commits.append(event[0])
+            return list_
+    new_event = None
+    if isinstance(event[0], Comment):
+        new_event = Issue(id_=event_id, assignee=event[1].assignee, original_post=event[0],
+                          repository=event[1].repository, title=event[1].title) if isinstance(event[1], Issue) \
+            else PullRequest(assignee=event[1].assignee, labels=event[1].labels, diffs=event[1].diffs,
+                             comments=[event[0]], commits=list(),
+                             from_branch=event[1].from_branch, from_repo=event[1].from_repo,
+                             number=event_id, state=event[1].state, title=event[1].title,
+                             to_branch=event[1].to_branch, to_repo=event[1].to_repo)
+    elif isinstance(event[0], StateChange):
+        # This happens only when the event started before the prefix
+        pass
+    elif isinstance(event[0], Reference):
+        # This happens only when the event started before the prefix
+        pass
+    elif isinstance(event[0], Commit):
+        new_event = PullRequest(assignee=event[1].assignee, labels=event[1].labels, diffs=event[1].diffs,
+                                comments=list(), commits=[event[0]],
+                                from_branch=event[1].from_branch, from_repo=event[1].from_repo,
+                                number=event_id, state=event[1].state, title=event[1].title,
+                                to_branch=event[1].to_branch, to_repo=event[1].to_repo)
+    if new_event:
+        list_.append(new_event)
+    return list_
+
+
+def inflate_events(events: List[Tuple[Union[Commit, Comment, StateChange, Reference],
+                                      Union[Commit, Issue, PullRequest]]],
+                   langs: List[str], name: str) -> Repository:
+    prs = list()
+    issues = list()
+    commits = list()
+    for event in events:
+        if isinstance(event[1], Commit):
+            commits.append(event[0])
+        else:
+            update(event, issues) if isinstance(event[1], Issue) else update(event, prs)
+    return Repository(commits=commits, issues=issues, langs=langs, name=name, prs=prs)
+
+
+def generate_batches(repo_, n_batches_):
+    event_stream = flatten_events(repo_)
+
+    batches_ = list()
+    sorted_prs = sorted(repo_.prs, key=lambda pr: pr.comments[0].timestamp)
+    chunk_size = int(len(sorted_prs) / n_batches_)
+    chunked_prs = [list(t) for t in zip(*[iter(sorted_prs)] * chunk_size)]
+    chunked_prs[0] = [event_stream[0][0]] + chunked_prs[0]
+    chunked_prs[-1].append(event_stream[-1][0])
+    for chunk in chunked_prs:
+        try:
+            start = chunk[0].comments[0].timestamp
+        except AttributeError:
+            start = chunk[0].timestamp
+        try:
+            end = chunk[-1].comments[0].timestamp
+        except AttributeError:
+            end = chunk[-1].timestamp
+
+        batch_ = filter_flat_events_by_time(event_stream, start, end)
+        batches_.append(batch_)
+
+    return batches_
+
+
+def generate_dev_fingerprint(repo_: Repository):
+    devs = {commit.author for commit in repo_.commits}
+    devs = devs.union({issue_.assignee for issue_ in repo_.issues})
+    dev_tick_rate = dict()
+
+    average_joe = list()
+    for dev in devs:
+        pr_td = list()
+        for pr in [pr for pr in repo_.prs if (pr.comments[0].author == dev if pr.comments else False)]:
+            for commit in pr.commits:
+                for issue_ in repo_.issues:
+                    if any([commit.c_hash.startswith(candidate) for candidate in issue_.commits]):
+                        pr_td.append(min([abs(entity.timestamp - pr.comments[0].timestamp)
+                                          for entity in [issue_.original_post]
+                                          + [reply for reply in issue_.replies if reply.author == dev]
+                                          + [state for state in issue_.states if
+                                             state.to_ == IssueStates.closed]]).total_seconds())
+                        break
+        if pr_td:
+            dev_tick_rate[dev] = float(np.mean(pr_td))
+            average_joe.append(dev_tick_rate[dev])
+    dev_tick_rate['AVG'] = float(np.mean(average_joe))
+    return dev_tick_rate
+
+
+def generate_pr_issue_interest_pairs(pr_, issue_list, truth_, net_size_in_days):
+    author = pr_.comments[0].author if pr_.comments else ''
+    considered = [i for i in issue_list
+                  if (min([abs(entity.timestamp - pr_.comments[0].timestamp)
+                           if entity.timestamp and pr_.comments
+                           else timedelta(days=net_size_in_days, seconds=1)
+                           for entity in
+                           [i.original_post]
+                           + [r for r in i.replies if r.author == author]
+                           + i.states
+                           + i.actions]) <= timedelta(days=net_size_in_days))] + [null_issue]
+    link_data = list()
+    for issue_ in considered:
+        try:
+            link_data.append(('#' + pr_.number[len('issue_'):]) in truth_['#' + issue_.id_[len('issue_'):]])
+        except KeyError:
+            link_data.append(False)
+    return zip(considered, [pr_] * len(considered), link_data)
+
+
+def generate_pi_wrapper(args):
+    return generate_pr_issue_interest_pairs(*args)
+
+
+def feature_wrapper(args):
+    return generate_features(*args)
+
+
+def undersample_naively(mult_, arg_list):
+    true_links = [d for d in arg_list if d[-1]]
+    false_links = [d for d in arg_list if not d[-1]]
+    shuffle(false_links)
+    false_links = false_links[:min(len(false_links), mult_ * len(true_links))]
+    arg_list = true_links + false_links
+    shuffle(arg_list)
+    return arg_list
+
+
+def generate_training_data(training_repo_: Repository, stopwords_: Set[str], fingerprint_: Dict[str, float],
+                           dict_, model_, truth_, mult_, min_len, net_size_in_days) \
+        -> List[link_datapoint]:
+    with Pool(processes=multiprocessing.cpu_count() - 1) as wp:
+        arg_list = list()
+        for v in wp.imap_unordered(generate_pi_wrapper,
+                                   zip(training_repo_.prs, len(training_repo_.prs) * [training_repo_.issues],
+                                       len(training_repo_.prs) * [truth_],
+                                       len(training_repo_.prs) * [net_size_in_days]),
+                                   chunksize=128):
+            for i, p, linked in v:
+                arg_list.append((i, p, stopwords_, fingerprint_, dict_, model_, linked,
+                                 min_len, net_size_in_days))
+
+        arg_list = undersample_naively(mult_, arg_list)
+
+        training_data_ = list()
+        for point in wp.imap_unordered(feature_wrapper, arg_list, chunksize=128):
+            training_data_.append(point)
+    return training_data_
+
+
+def generate_training_data_seq(training_repo_: Repository, stopwords_: Set[str], fingerprint_: Dict[str, float],
+                               dict_, model_, truth_, mult_, min_len, net_size_in_days) \
+        -> List[link_datapoint]:
+    training_data_ = list()
+    arg_list = list()
+    for pr in training_repo_.prs:
+        for v in generate_pr_issue_interest_pairs(pr, training_repo_.issues, truth_, net_size_in_days):
+            i, p, linked = v
+            arg_list.append((i, p, stopwords_, fingerprint_, dict_, model_, linked))
+
+    arg_list = undersample_naively(mult_, arg_list)
+
+    for i, p, stopwords_, fingerprint_, dict_, model_, linked in arg_list:
+        training_data_.append(generate_features(i, p, stopwords_, fingerprint_, dict_, model_, linked,
+                                                min_len, net_size_in_days))
+    return training_data_
+
+
+def train_classifier(training_data_: List[link_datapoint]) -> RandomForestClassifier:
+    X = list()
+    y = list()
+    for point in training_data_:
+        X.append((point.engagement,
+                  point.cosine_tt,
+                  point.cosine,
+                  point.lag,
+                  point.lag_close,
+                  point.lag_open,
+                  point.pr_commits,))
+        y.append(1 if point.linked else -1)
+
+    clf_ = RandomForestClassifier(n_estimators=100, class_weight='balanced_subsample')
+    clf_.fit(X, y)
+    return clf_
+
+
+def generate_tfidf(repository: Repository, stopwords_: Set[str], min_len) -> Tuple[tfidfmodel.TfidfModel, Dictionary]:
+    texts = list()
+    for pr in repository.prs:
+        texts.append(text_pipeline(pr, stopwords_, min_len))
+    for issue_ in repository.issues:
+        texts.append(text_pipeline(issue_, stopwords_, min_len))
+
+    dictionary_ = Dictionary(texts)
+    working_corpus = [dictionary_.doc2bow(text) for text in texts]
+    return tfidfmodel.TfidfModel(working_corpus, id2word=dictionary_), dictionary_
