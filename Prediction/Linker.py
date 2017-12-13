@@ -10,6 +10,7 @@ from gensim.corpora import Dictionary
 from gensim.models import TfidfModel
 
 from Prediction.feature_generation import generate_features
+from Prediction.gitScraper import clone_git_repo_to_tmp, get_all_commit_hashes, process_a_commit
 from Prediction.training_utils import train_classifier, generate_training_data, generate_dev_fingerprint, \
     generate_tfidf, update, inflate_events, generate_batches, null_issue, flatten_events
 from Util import utils_
@@ -156,9 +157,14 @@ class Linker(object):
         # TODO: Get all new entities from <since> and push them through update
         pass
 
-    def update_from_local_git(self, git_location, since_sha, branch):
-        # TODO: Get all new commits after <since_sha> on <branch> from git at <git_location>
-        pass
+    def update_from_local_git(self, git_location, since_sha):
+        repo_name = self.repository_obj.name
+        hashes = get_all_commit_hashes(git_location)
+        hashes = hashes[hashes.index(since_sha):]
+        commits = list(map(lambda h: process_a_commit(h, repo_name, git_location), hashes))
+        for commit in commits:
+            if commit not in self.repository_obj.commits:
+                self.repository_obj.commits.append(commit)
 
     def update_truth(self, link):
         """
