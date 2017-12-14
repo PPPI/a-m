@@ -9,6 +9,22 @@ from Util.github_api_methods import parse_pr_ref
 
 models = ['PhilJay_MPAndroidChart', 'google_guava']
 linkers = dict()
+# TODO: instantiate the variables and expose their initial/config to a config file
+locations = dict()
+last_update = None
+max_age_to_keep = None
+most_recent_sha = None
+
+
+def update_and_trim():
+    global last_update, max_age_to_keep, most_recent_sha, locations, linkers
+    for project in models:
+        links = linkers[project].update_from_github(last_update)
+        linkers[project].update_from_local_git(locations[projects], most_recent_sha)
+        for link in links:
+            linkers[project].update_truth(link)
+        linkers[project].forget_older_than(max_age_to_keep)
+        linkers[project].trim_truth()
 
 
 # Restrict to a particular path.
@@ -23,7 +39,6 @@ with SimpleXMLRPCServer(("localhost", 8000), requestHandler=RequestHandler) as s
     server.register_introspection_functions()
     gh = Github()
     # Get lazy references to the projects on GitHub, will use to keep local models up to date
-    # TODO: Forgetting acquired information
     projects = {model: gh.get_repo(model.replace('_', '/')) for model in models}
 
     # Register an instance; all the methods of the instance are
