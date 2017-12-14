@@ -105,8 +105,8 @@ class Linker(object):
         prediction_pr.comments = prediction_pr.comments[:1]
         open_issues = [i for i in self.repository_obj.issues
                        if
-                       # (len(i.states) == 0 or i.states[-1].to_ == IssueStates.open)
-                       # and
+                       (len(i.states) == 0 or i.states[-1].to_ == IssueStates.open)
+                       or
                        (min([abs(entity.timestamp - prediction_pr.comments[0].timestamp)
                              if entity.timestamp and prediction_pr.comments
                              else timedelta(days=self.net_size_in_days, seconds=1)
@@ -165,6 +165,8 @@ class Linker(object):
         repo = gh.get_repo(self.repository_obj.name)
         pr_numbers = [pr.number for pr in self.repository_obj.prs]
         issue_ids = [issue.id_ for issue in self.repository_obj.issues]
+        links = list()
+        # TODO: Record links as we add new entities
         for pr_ref in repo.get_pulls(state='all'):
             if pr_ref.number in pr_numbers:
                 break
@@ -181,6 +183,7 @@ class Linker(object):
                     update(commit, self.repository_obj.issues)
             else:
                 self.repository_obj.issues.append(issue)
+        return links
 
     def update_from_local_git(self, git_location, since_sha):
         """
