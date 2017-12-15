@@ -5,6 +5,9 @@ import xmlrpc.client
 
 
 # Helper function that sends a message to the webapp.
+import github
+
+
 def send_message(message):
     # Write message size.
     sys.stdout.buffer.write(struct.pack('i', len(message)))
@@ -56,7 +59,10 @@ def read_thread_func():
         except Exception as e:
             with open('debug.txt', 'w') as f:
                 f.write('Failed Predict, %s' % str(e))
-            out_msg = '{"Suggestions": [], "Error": "Failed to generate suggestions due to %s"}' % str(e)
+            if 'RateLimitExceededException' in str(e):
+                out_msg = '{"Suggestions": [], "Error": "Github API rate-limit exceeded"}'
+            else:
+                out_msg = '{"Suggestions": [], "Error": "Failed to generate suggestions due to %s"}' % str(e)
             send_message(out_msg)
 
 
