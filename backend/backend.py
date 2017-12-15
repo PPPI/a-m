@@ -1,3 +1,5 @@
+import json
+from datetime import datetime
 from xmlrpc.server import SimpleXMLRPCServer
 from xmlrpc.server import SimpleXMLRPCRequestHandler
 from github import Github
@@ -7,13 +9,12 @@ import os
 
 from Util.github_api_methods import parse_pr_ref
 
-models = ['PhilJay_MPAndroidChart', 'google_guava']
+models = list()
 linkers = dict()
-# TODO: instantiate the variables and expose their initial/config to a config file
 locations = dict()
-last_update = None
-max_age_to_keep = None
-most_recent_sha = None
+git_locations = dict()
+last_update = dict()
+most_recent_sha = dict()
 
 
 def update_and_trim():
@@ -34,9 +35,23 @@ class RequestHandler(SimpleXMLRPCRequestHandler):
 
 # Create server
 with SimpleXMLRPCServer(("localhost", 8000), requestHandler=RequestHandler) as server:
+    with open(os.path.join(os.curdir, 'config.json')) as f:
+        config = json.loads(f.read())
+
+    for location in config['locations']:
+        models.append(os.path.basename(location))
+        locations[os.path.basename(location)] = location
+        git_locations[os.path.basename(location)] = config['git_locations'][config['locations'].index(location)]
+        last_update[os.path.basename(location)] = datetime.now
+        # TODO: Extract most recent sha from git
+        most_recent_sha[os.path.basename(location)] = None
+    max_age_to_keep = config['max_age_to_keep']
+
     for model in models:
-        linkers[model] = Linker.load_from_disk(os.path.join(os.curdir, 'models', model))
+        linkers[model] = Linker.load_from_disk(locations[model])
+
     server.register_introspection_functions()
+
     gh = Github()
     # Get lazy references to the projects on GitHub, will use to keep local models up to date
     projects = {model: gh.get_repo(model.replace('_', '/')) for model in models}

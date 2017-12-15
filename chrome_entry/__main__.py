@@ -5,9 +5,6 @@ import xmlrpc.client
 
 
 # Helper function that sends a message to the webapp.
-import github
-
-
 def send_message(message):
     # Write message size.
     sys.stdout.buffer.write(struct.pack('i', len(message)))

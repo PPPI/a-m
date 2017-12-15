@@ -1,0 +1,5 @@
+{
+  "locations" : ["./models/PhilJay_MPAndroidChart","./models/google_guava"],
+  "git_locations" : ["", ""],
+  "max_age_to_keep" : 60
+}
