@@ -34,6 +34,7 @@ def read_thread_func():
             continue
         repo = msg['Repository'].translate({ord(c): '_' for c in '\\/'})
         pr_id = msg['PR']
+        issue_id = msg['Issue']
         out_msg = '{"Suggestions": [], "Error": "Received data, loading model."}'
         send_message(out_msg)
 
@@ -41,7 +42,10 @@ def read_thread_func():
             out_msg = '{"Suggestions": [], "Error": "Model loaded, running predictions."}'
             send_message(out_msg)
             local_server = xmlrpc.client.ServerProxy('http://localhost:8000')
-            suggestions = local_server.predict_pr(repo, pr_id)
+            if pr_id:
+                suggestions = local_server.predict_pr(repo, pr_id)
+            elif issue_id:
+                suggestions = local_server.predict_issue(repo, issue_id)
             # with open('debug.txt', 'w') as f:
             #     f.write('Got suggestions: %s' % str(suggestions))
             if len(suggestions) > 0:

@@ -7,7 +7,7 @@ from github import Github
 from Prediction.Linker import Linker
 import os
 
-from Util.github_api_methods import parse_pr_ref
+from Util.github_api_methods import parse_pr_ref, parse_issue_ref
 
 models = list()
 linkers = dict()
@@ -59,15 +59,14 @@ with SimpleXMLRPCServer(("localhost", 8000), requestHandler=RequestHandler) as s
     # Register an instance; all the methods of the instance are
     # published as XML-RPC methods
     class PredictionFunctions:
-        # TODO: Create issue symmetric case
-        # def predict_issue(self, project, issue_id):
-        #     try:
-        #         issue_ref = projects[project].get_issue(issue_id)
-        #         issue = parse_issue_ref(issue_ref)
-        #
-        #         return suggestions
-        #     except KeyError:
-        #         return None
+        def predict_issue(self, project, issue_id):
+            try:
+                issue_ref = projects[project].get_issue(int(issue_id))
+                issue = parse_issue_ref(issue_ref)
+                _, suggestions = linkers[project].update_and_predict((issue, issue))
+                return list(suggestions)
+            except KeyError:
+                return None
 
         def predict_pr(self, project, pr_id):
             try:

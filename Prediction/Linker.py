@@ -11,13 +11,13 @@ from gensim.models import TfidfModel
 from github import Github
 
 from Prediction.feature_generation import generate_features
-from Prediction.gitScraper import clone_git_repo_to_tmp, get_all_commit_hashes, process_a_commit
+from Prediction.gitScraper import get_all_commit_hashes, process_a_commit
 from Prediction.training_utils import train_classifier, generate_training_data, generate_dev_fingerprint, \
-    generate_tfidf, update, inflate_events, generate_batches, null_issue, flatten_events
+    generate_tfidf, update, inflate_events, generate_batches, null_issue, flatten_events, null_pr
 from Util import utils_
 from Util.ReservedKeywords import java_reserved, c_reserved, cpp_reserved, javascript_reserved, python_reserved
 from Util.github_api_methods import parse_pr_ref, parse_issue_ref
-from gitMine.VCClasses import IssueStates, Commit, Issue
+from gitMine.VCClasses import IssueStates, Commit, Issue, PullRequest
 
 stopwords = utils_.GitMineUtils.STOPWORDS \
             + list(set(java_reserved + c_reserved + cpp_reserved + javascript_reserved + python_reserved))
@@ -99,49 +99,92 @@ class Linker(object):
                                                            self.undersample_multiplicity, self.min_tok_len,
                                                            self.net_size_in_days))
 
-    def predict(self, prediction_pr):
-        predictions = list()
-        # Predict
-        prediction_pr.comments = prediction_pr.comments[:1]
-        open_issues = [i for i in self.repository_obj.issues
-                       if
-                       (len(i.states) == 0 or i.states[-1].to_ == IssueStates.open)
-                       or
-                       (min([abs(entity.timestamp - prediction_pr.comments[0].timestamp)
-                             if entity.timestamp and prediction_pr.comments
-                             else timedelta(days=self.net_size_in_days, seconds=1)
-                             for entity in
-                             [i.original_post]
-                             + i.states
-                             + i.actions]) <= timedelta(days=self.net_size_in_days))]
-        open_issues += [null_issue]
-        prediction_data = list()
-        for issue_ in open_issues:
-            prediction_data.append(generate_features(issue_, prediction_pr, stopwords, self.fingerprint,
-                                                     self.dictionary, self.model, dict(), self.min_tok_len,
-                                                     self.net_size_in_days))
+    def predict(self, prediction_object):
+        threshold = self.prediction_threshold
+        if isinstance(prediction_object, PullRequest):
+            predictions = list()
+            # Predict
+            prediction_object.comments = prediction_object.comments[:1]
+            open_issues = [i for i in self.repository_obj.issues
+                           if
+                           (len(i.states) == 0 or i.states[-1].to_ == IssueStates.open)
+                           or
+                           (min([abs(entity.timestamp - prediction_object.comments[0].timestamp)
+                                 if entity.timestamp and prediction_object.comments
+                                 else timedelta(days=self.net_size_in_days, seconds=1)
+                                 for entity in
+                                 [i.original_post]
+                                 + i.states
+                                 + i.actions]) <= timedelta(days=self.net_size_in_days))]
+            open_issues += [null_issue]
+            prediction_data = list()
+            for issue_ in open_issues:
+                prediction_data.append(generate_features(issue_, prediction_object, stopwords, self.fingerprint,
+                                                         self.dictionary, self.model, dict(), self.min_tok_len,
+                                                         self.net_size_in_days))
 
-        for point in prediction_data:
-            probabilities = self.clf.predict_proba(np.array((point.engagement,
-                                                             point.cosine_tt,
-                                                             point.cosine,
-                                                             point.lag,
-                                                             point.lag_close,
-                                                             point.lag_open,
-                                                             point.pr_commits,)).reshape(1, -1))
-            prediction = (point.issue, float(probabilities[0][1]))
-            predictions.append(prediction)
-        predictions = sorted([p for p in predictions if p[1] >= self.prediction_threshold],
-                             key=lambda p: (p[1], p[0]),
-                             reverse=True)
-        return prediction_pr.number, predictions
+            for point in prediction_data:
+                probabilities = self.clf.predict_proba(np.array((point.engagement,
+                                                                 point.cosine_tt,
+                                                                 point.cosine,
+                                                                 point.lag,
+                                                                 point.lag_close,
+                                                                 point.lag_open,
+                                                                 point.pr_commits,)).reshape(1, -1))
+                if point.pr == 'null_issue':
+                    threshold = max(threshold, probabilities[0][1])
+                else:
+                    prediction = (point.issue, float(probabilities[0][1]))
+                    predictions.append(prediction)
+            predictions = sorted([p for p in predictions if p[1] >= threshold],
+                                 key=lambda p: (p[1], p[0]),
+                                 reverse=True)
+            return prediction_object.number, predictions
+        elif isinstance(prediction_object, Issue):
+            predictions = list()
+            # Predict
+            candidates = [p for p in self.repository_obj.prs
+                          if
+                          (min([abs(entity.timestamp - p.comments[0].timestamp)
+                                if entity.timestamp and p.comments
+                                else timedelta(days=self.net_size_in_days, seconds=1)
+                                for entity in
+                                [prediction_object.original_post]
+                                + prediction_object.states
+                                + prediction_object.actions]) <= timedelta(days=self.net_size_in_days))]
+            candidates += [null_pr]
+            prediction_data = list()
+            for pr_ in candidates:
+                prediction_data.append(generate_features(prediction_object, pr_, stopwords, self.fingerprint,
+                                                         self.dictionary, self.model, dict(), self.min_tok_len,
+                                                         self.net_size_in_days))
+
+            for point in prediction_data:
+                probabilities = self.clf.predict_proba(np.array((point.engagement,
+                                                                 point.cosine_tt,
+                                                                 point.cosine,
+                                                                 point.lag,
+                                                                 point.lag_close,
+                                                                 point.lag_open,
+                                                                 point.pr_commits,)).reshape(1, -1))
+                if point.pr == 'null_pr':
+                    threshold = max(threshold, probabilities[0][1])
+                else:
+                    prediction = (point.pr, float(probabilities[0][1]))
+                    predictions.append(prediction)
+            predictions = sorted([p for p in predictions if p[1] >= threshold],
+                                 key=lambda p: (p[1], p[0]),
+                                 reverse=True)
+            return prediction_object.id_, predictions
 
     def update_and_predict(self, event):
         if isinstance(event[1], Commit):
             if event[0] not in self.repository_obj.commits:
                 self.repository_obj.commits.append(event[0])
         elif isinstance(event[1], Issue):
+            prediction = self.predict(event[1])
             update(event, self.repository_obj.issues)
+            return prediction
         else:
             prediction = self.predict(event[1])
             update(event, self.repository_obj.prs)
