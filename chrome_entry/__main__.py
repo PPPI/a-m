@@ -63,7 +63,7 @@ def read_thread_func():
             if 'RateLimitExceededException' in str(e):
                 out_msg = '{"Suggestions": [], "Error": "Github API rate-limit exceeded"}'
             else:
-                out_msg = '{"Suggestions": [], "Error": "Failed to generate suggestions due to %s"}' % str(e)
+                out_msg = '{"Suggestions": [], "Error": "Failed to generate suggestions due to %s"}' % json.dumps(str(e))
             send_message(out_msg)
 
 

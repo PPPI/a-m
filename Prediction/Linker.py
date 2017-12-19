@@ -1,6 +1,7 @@
 import pickle
 import os
 import math
+from multiprocessing.pool import Pool
 
 import jsonpickle
 import numpy as np
@@ -76,6 +77,38 @@ def evaluate_at_threshold(result, th, truth):
     return mrr, ap, dcg, hit, fpr, fnr
 
 
+class Issue_Closure(object):
+    def __init__(self, prediction_object, stopwords, fingerprint, dictionary, model, min_tok_len, net_size_in_days):
+        self.prediction_object = prediction_object
+        self.stopwords = stopwords
+        self.fingerprint = fingerprint
+        self.dictionary = dictionary
+        self.model = model
+        self.min_tok_len = min_tok_len
+        self.net_size_in_days = net_size_in_days
+
+    def __call__(self, issue):
+        return generate_features(issue, self.prediction_object, stopwords, self.fingerprint,
+                                 self.dictionary, self.model, dict(), self.min_tok_len,
+                                 self.net_size_in_days)
+
+
+class PR_Closure(object):
+    def __init__(self, prediction_object, stopwords, fingerprint, dictionary, model, min_tok_len, net_size_in_days):
+        self.prediction_object = prediction_object
+        self.stopwords = stopwords
+        self.fingerprint = fingerprint
+        self.dictionary = dictionary
+        self.model = model
+        self.min_tok_len = min_tok_len
+        self.net_size_in_days = net_size_in_days
+
+    def __call__(self, pr):
+        return generate_features(self.prediction_object, pr, stopwords, self.fingerprint,
+                                 self.dictionary, self.model, dict(), self.min_tok_len,
+                                 self.net_size_in_days)
+
+
 class Linker(object):
     def __init__(self, net_size_in_days, min_tok_len, undersample_multiplicity):
         self.repository_obj = None
@@ -118,10 +151,18 @@ class Linker(object):
                                  + i.actions]) <= timedelta(days=self.net_size_in_days))]
             open_issues += [null_issue]
             prediction_data = list()
-            for issue_ in open_issues:
-                prediction_data.append(generate_features(issue_, prediction_object, stopwords, self.fingerprint,
-                                                         self.dictionary, self.model, dict(), self.min_tok_len,
-                                                         self.net_size_in_days))
+
+            if len(open_issues) > 128:
+                with Pool(processes=os.cpu_count() - 1) as wp:
+                    for point in wp.map(func=Issue_Closure(prediction_object, stopwords, self.fingerprint,
+                                                           self.dictionary, self.model, self.min_tok_len,
+                                                           self.net_size_in_days), iterable=open_issues, chunksize=128):
+                        prediction_data.append(point)
+            else:
+                for issue in open_issues:
+                    prediction_data.append(generate_features(issue, prediction_object, stopwords, self.fingerprint,
+                                                             self.dictionary, self.model, dict(), self.min_tok_len,
+                                                             self.net_size_in_days))
 
             for point in prediction_data:
                 probabilities = self.clf.predict_proba(np.array((point.engagement,
@@ -154,10 +195,18 @@ class Linker(object):
                                 + prediction_object.actions]) <= timedelta(days=self.net_size_in_days))]
             candidates += [null_pr]
             prediction_data = list()
-            for pr_ in candidates:
-                prediction_data.append(generate_features(prediction_object, pr_, stopwords, self.fingerprint,
-                                                         self.dictionary, self.model, dict(), self.min_tok_len,
-                                                         self.net_size_in_days))
+
+            if len(candidates) > 128:
+                with Pool(processes=os.cpu_count() - 1) as wp:
+                    for point in wp.map(func=PR_Closure(prediction_object, stopwords, self.fingerprint,
+                                                        self.dictionary, self.model, self.min_tok_len,
+                                                        self.net_size_in_days), iterable=candidates, chunksize=128):
+                        prediction_data.append(point)
+            else:
+                for pr in candidates:
+                        prediction_data.append(generate_features(prediction_object, pr, stopwords, self.fingerprint,
+                                                                 self.dictionary, self.model, dict(), self.min_tok_len,
+                                                                 self.net_size_in_days))
 
             for point in prediction_data:
                 probabilities = self.clf.predict_proba(np.array((point.engagement,
