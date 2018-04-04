@@ -63,7 +63,7 @@ def update(event: Tuple[Union[Comment, StateChange, Reference], Union[Issue, Pul
             if isinstance(event[0], Comment):
                 elem.replies.append(event[0]) if isinstance(elem, Issue) else elem.comments.append(event[0])
             elif isinstance(event[0], StateChange):
-                elem.states.append(event[0])
+                elem.states.append(event[0]) if isinstance(elem, Issue) else elem.state = event[0].to_
             elif isinstance(event[0], Reference):
                 elem.actions.append(event[0])
             elif isinstance(event[0], Commit):
@@ -211,6 +211,18 @@ def generate_training_data(training_repo_: Repository, stopwords_: Set[str], fin
                 arg_list.append((i, p, stopwords_, fingerprint_, dict_, model_, linked,
                                  min_len, net_size_in_days))
 
+        # Explicitly add no_link to the training data
+        issue_map = {i[0]: any([t[6] for t in arg_list]) for i in arg_list}
+        pr_map = {i[1]: any([t[6] for t in arg_list]) for i in arg_list}
+        for issue, any_link in issue_map.items():
+            if not any_link:
+                arg_list.append((issue, null_pr, stopwords_, fingerprint_, dict_, model_, True,
+                                 min_len, net_size_in_days))
+        for pr, any_link in pr_map.items():
+            if not any_link:
+                arg_list.append((null_issue, pr, stopwords_, fingerprint_, dict_, model_, True,
+                                 min_len, net_size_in_days))
+
         arg_list = undersample_naively(mult_, arg_list)
 
         training_data_ = list()
@@ -228,6 +240,18 @@ def generate_training_data_seq(training_repo_: Repository, stopwords_: Set[str],
         for v in generate_pr_issue_interest_pairs(pr, training_repo_.issues, truth_, net_size_in_days):
             i, p, linked = v
             arg_list.append((i, p, stopwords_, fingerprint_, dict_, model_, linked))
+
+    # Explicitly add no_link to the training data
+    issue_map = {i[0]: any([t[6] for t in arg_list]) for i in arg_list}
+    pr_map = {i[1]: any([t[6] for t in arg_list]) for i in arg_list}
+    for issue, any_link in issue_map.values():
+        if not any_link:
+            arg_list.append((issue, null_pr, stopwords_, fingerprint_, dict_, model_, True,
+                             min_len, net_size_in_days))
+    for pr, any_link in pr_map.values():
+        if not any_link:
+            arg_list.append((null_issue, pr, stopwords_, fingerprint_, dict_, model_, True,
+                             min_len, net_size_in_days))
 
     arg_list = undersample_naively(mult_, arg_list)
 
@@ -263,5 +287,7 @@ def generate_tfidf(repository: Repository, stopwords_: Set[str], min_len) -> Tup
         texts.append(text_pipeline(issue_, stopwords_, min_len))
 
     dictionary_ = Dictionary(texts)
-    working_corpus = [dictionary_.doc2bow(text) for text in texts]
+    working_corpus = [dictionary_.doc2bow(text, return_missing=True) for text in texts]
+    # Convert UNK from explicit dictionary to UNK token (id = -1)
+    working_corpus = [val[0] + [(-1, sum(val[1].values()))] for val in working_corpus]
     return tfidfmodel.TfidfModel(working_corpus, id2word=dictionary_), dictionary_
