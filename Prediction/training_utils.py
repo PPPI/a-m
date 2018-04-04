@@ -268,7 +268,7 @@ def train_classifier(training_data_: List[Dict[str, Any]]) -> RandomForestClassi
     X = list()
     y = list()
     for point in training_data_:
-        X.append(tuple([v for k, v in point.items() if k != 'linked']))
+        X.append(tuple([v for k, v in point.items() if k not in ['linked', 'issue', 'pr']]))
         y.append(1 if point['linked'] else -1)
 
     clf_ = RandomForestClassifier(n_estimators=100, class_weight='balanced_subsample')

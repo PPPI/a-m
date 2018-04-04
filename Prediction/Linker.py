@@ -189,12 +189,13 @@ class Linker(object):
                     prediction_data.append(self.feature_generator.generate_features(issue, prediction_object, False))
 
             for point in prediction_data:
-                probabilities = self.clf.predict_proba(np.array(tuple([v for k, v in point.items() if k != 'linked']))
+                probabilities = self.clf.predict_proba(np.array(tuple([v for k, v in point.items()
+                                                                       if k not in ['linked', 'issue', 'pr']]))
                                                        .reshape(1, -1))
-                if point.pr == 'null_issue':
+                if point['issue'] == 'null_issue':
                     threshold = max(threshold, probabilities[0][1])
                 else:
-                    prediction = (point.issue, float(probabilities[0][1]))
+                    prediction = (point['issue'], float(probabilities[0][1]))
                     predictions.append(prediction)
             predictions = sorted([p for p in predictions if p[1] >= threshold],
                                  key=lambda p: (p[1], p[0]),
@@ -225,12 +226,13 @@ class Linker(object):
                     prediction_data.append(self.feature_generator.generate_features(prediction_object, pr, False))
 
             for point in prediction_data:
-                probabilities = self.clf.predict_proba(np.array(tuple([v for k, v in point.items() if k != 'linked']))
+                probabilities = self.clf.predict_proba(np.array(tuple([v for k, v in point.items()
+                                                                       if k not in ['linked', 'issue', 'pr']]))
                                                        .reshape(1, -1))
-                if point.pr == 'null_pr':
+                if point['pr'] == 'null_pr':
                     threshold = max(threshold, probabilities[0][1])
                 else:
-                    prediction = (point.pr, float(probabilities[0][1]))
+                    prediction = (point['pr'], float(probabilities[0][1]))
                     predictions.append(prediction)
             predictions = sorted([p for p in predictions if p[1] >= threshold],
                                  key=lambda p: (p[1], p[0]),
