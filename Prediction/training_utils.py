@@ -63,7 +63,10 @@ def update(event: Tuple[Union[Comment, StateChange, Reference], Union[Issue, Pul
             if isinstance(event[0], Comment):
                 elem.replies.append(event[0]) if isinstance(elem, Issue) else elem.comments.append(event[0])
             elif isinstance(event[0], StateChange):
-                elem.states.append(event[0]) if isinstance(elem, Issue) else elem.state = event[0].to_
+                if isinstance(elem, Issue):
+                    elem.states.append(event[0])
+                else:
+                    elem.state = event[0].to_
             elif isinstance(event[0], Reference):
                 elem.actions.append(event[0])
             elif isinstance(event[0], Commit):
