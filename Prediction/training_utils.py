@@ -5,14 +5,12 @@ import multiprocessing
 import numpy as np
 
 from datetime import datetime, timedelta
-from typing import List, Tuple, Union, Set, Dict
+from typing import List, Tuple, Union, Set, Dict, Any
 
 from gensim.corpora import Dictionary
 from gensim.models import tfidfmodel
 from sklearn.ensemble import RandomForestClassifier
 
-from Prediction.feature_generation import generate_features
-from Prediction.named_tuple_util import link_datapoint
 from Prediction.text_utils import text_pipeline
 from gitMine.VCClasses import Repository, Commit, Comment, StateChange, Reference, Issue, PullRequest, IssueStates
 
@@ -162,6 +160,16 @@ def generate_dev_fingerprint(repo_: Repository):
     return dev_tick_rate
 
 
+def undersample_naively(mult_, arg_list):
+    true_links = [d for d in arg_list if d[-1]]
+    false_links = [d for d in arg_list if not d[-1]]
+    shuffle(false_links)
+    false_links = false_links[:min(len(false_links), mult_ * len(true_links))]
+    arg_list = true_links + false_links
+    shuffle(arg_list)
+    return arg_list
+
+
 def generate_pr_issue_interest_pairs(pr_, issue_list, truth_, net_size_in_days):
     author = pr_.comments[0].author if pr_.comments else ''
     considered = [i for i in issue_list
@@ -186,23 +194,17 @@ def generate_pi_wrapper(args):
     return generate_pr_issue_interest_pairs(*args)
 
 
-def feature_wrapper(args):
-    return generate_features(*args)
+def feature_closure(feature_generator):
+    def feature_wrapper(args):
+        return feature_generator.generate_features(*args)
+    return feature_wrapper
 
 
-def undersample_naively(mult_, arg_list):
-    true_links = [d for d in arg_list if d[-1]]
-    false_links = [d for d in arg_list if not d[-1]]
-    shuffle(false_links)
-    false_links = false_links[:min(len(false_links), mult_ * len(true_links))]
-    arg_list = true_links + false_links
-    shuffle(arg_list)
-    return arg_list
-
-
-def generate_training_data(training_repo_: Repository, stopwords_: Set[str], fingerprint_: Dict[str, float],
-                           dict_, model_, truth_, mult_, min_len, net_size_in_days) \
-        -> List[link_datapoint]:
+def generate_training_data(training_repo_: Repository,
+                               feature_generator,
+                               net_size_in_days,
+                               truth_,
+                               mult_) -> List[Dict[str, Any]]:
     with Pool(processes=multiprocessing.cpu_count() - 1) as wp:
         arg_list = list()
         for v in wp.imap_unordered(generate_pi_wrapper,
@@ -211,71 +213,62 @@ def generate_training_data(training_repo_: Repository, stopwords_: Set[str], fin
                                        len(training_repo_.prs) * [net_size_in_days]),
                                    chunksize=128):
             for i, p, linked in v:
-                arg_list.append((i, p, stopwords_, fingerprint_, dict_, model_, linked,
-                                 min_len, net_size_in_days))
+                arg_list.append((i, p, linked))
 
         # Explicitly add no_link to the training data
         issue_map = {i[0]: any([t[6] for t in arg_list]) for i in arg_list}
         pr_map = {i[1]: any([t[6] for t in arg_list]) for i in arg_list}
         for issue, any_link in issue_map.items():
             if not any_link:
-                arg_list.append((issue, null_pr, stopwords_, fingerprint_, dict_, model_, True,
-                                 min_len, net_size_in_days))
+                arg_list.append((issue, null_pr, True))
         for pr, any_link in pr_map.items():
             if not any_link:
-                arg_list.append((null_issue, pr, stopwords_, fingerprint_, dict_, model_, True,
-                                 min_len, net_size_in_days))
+                arg_list.append((null_issue, pr, True))
 
         arg_list = undersample_naively(mult_, arg_list)
 
+        feature_wrapper = feature_closure(feature_generator)
         training_data_ = list()
         for point in wp.imap_unordered(feature_wrapper, arg_list, chunksize=128):
             training_data_.append(point)
     return training_data_
 
 
-def generate_training_data_seq(training_repo_: Repository, stopwords_: Set[str], fingerprint_: Dict[str, float],
-                               dict_, model_, truth_, mult_, min_len, net_size_in_days) \
-        -> List[link_datapoint]:
+def generate_training_data_seq(training_repo_: Repository,
+                               feature_generator,
+                               net_size_in_days,
+                               truth_,
+                               mult_) -> List[Dict[str, Any]]:
     training_data_ = list()
     arg_list = list()
     for pr in training_repo_.prs:
         for v in generate_pr_issue_interest_pairs(pr, training_repo_.issues, truth_, net_size_in_days):
             i, p, linked = v
-            arg_list.append((i, p, stopwords_, fingerprint_, dict_, model_, linked))
+            arg_list.append((i, p, linked))
 
     # Explicitly add no_link to the training data
     issue_map = {i[0]: any([t[6] for t in arg_list]) for i in arg_list}
     pr_map = {i[1]: any([t[6] for t in arg_list]) for i in arg_list}
     for issue, any_link in issue_map.values():
         if not any_link:
-            arg_list.append((issue, null_pr, stopwords_, fingerprint_, dict_, model_, True,
-                             min_len, net_size_in_days))
+            arg_list.append((issue, null_pr, True))
     for pr, any_link in pr_map.values():
         if not any_link:
-            arg_list.append((null_issue, pr, stopwords_, fingerprint_, dict_, model_, True,
-                             min_len, net_size_in_days))
+            arg_list.append((null_issue, pr, True))
 
     arg_list = undersample_naively(mult_, arg_list)
 
     for i, p, stopwords_, fingerprint_, dict_, model_, linked in arg_list:
-        training_data_.append(generate_features(i, p, stopwords_, fingerprint_, dict_, model_, linked,
-                                                min_len, net_size_in_days))
+        training_data_.append(feature_generator.generate_features(i, p, linked))
     return training_data_
 
 
-def train_classifier(training_data_: List[link_datapoint]) -> RandomForestClassifier:
+def train_classifier(training_data_: List[Dict[str, Any]]) -> RandomForestClassifier:
     X = list()
     y = list()
     for point in training_data_:
-        X.append((point.engagement,
-                  point.cosine_tt,
-                  point.cosine,
-                  point.lag,
-                  point.lag_close,
-                  point.lag_open,
-                  point.pr_commits,))
-        y.append(1 if point.linked else -1)
+        X.append(tuple([v for k, v in point.items() if k != 'linked']))
+        y.append(1 if point['linked'] else -1)
 
     clf_ = RandomForestClassifier(n_estimators=100, class_weight='balanced_subsample')
     clf_.fit(X, y)

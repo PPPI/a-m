@@ -11,7 +11,7 @@ from gensim.corpora import Dictionary
 from gensim.models import TfidfModel
 from github import Github
 
-from Prediction.feature_generation import generate_features
+from Prediction.feature_generation import FeatureGenerator
 from Prediction.gitScraper import get_all_commit_hashes, process_a_commit
 from Prediction.training_utils import train_classifier, generate_training_data, generate_dev_fingerprint, \
     generate_tfidf, update, inflate_events, generate_batches, null_issue, flatten_events, null_pr
@@ -19,9 +19,6 @@ from Util import utils_
 from Util.ReservedKeywords import java_reserved, c_reserved, cpp_reserved, javascript_reserved, python_reserved
 from Util.github_api_methods import parse_pr_ref, parse_issue_ref
 from gitMine.VCClasses import IssueStates, Commit, Issue, PullRequest
-
-stopwords = utils_.GitMineUtils.STOPWORDS \
-            + list(set(java_reserved + c_reserved + cpp_reserved + javascript_reserved + python_reserved))
 
 
 def evaluate_at_threshold(result, th, truth):
@@ -78,59 +75,77 @@ def evaluate_at_threshold(result, th, truth):
 
 
 class Issue_Closure(object):
-    def __init__(self, prediction_object, stopwords, fingerprint, dictionary, model, min_tok_len, net_size_in_days):
+    def __init__(self, prediction_object, feature_generator):
         self.prediction_object = prediction_object
-        self.stopwords = stopwords
-        self.fingerprint = fingerprint
-        self.dictionary = dictionary
-        self.model = model
-        self.min_tok_len = min_tok_len
-        self.net_size_in_days = net_size_in_days
+        self.feature_generator = feature_generator
 
     def __call__(self, issue):
-        return generate_features(issue, self.prediction_object, stopwords, self.fingerprint,
-                                 self.dictionary, self.model, dict(), self.min_tok_len,
-                                 self.net_size_in_days)
+        return self.feature_generator.generate_features(issue, self.prediction_object, False)
 
 
 class PR_Closure(object):
-    def __init__(self, prediction_object, stopwords, fingerprint, dictionary, model, min_tok_len, net_size_in_days):
+    def __init__(self, prediction_object, feature_generator):
         self.prediction_object = prediction_object
-        self.stopwords = stopwords
-        self.fingerprint = fingerprint
-        self.dictionary = dictionary
-        self.model = model
-        self.min_tok_len = min_tok_len
-        self.net_size_in_days = net_size_in_days
+        self.feature_generator = feature_generator
 
     def __call__(self, pr):
-        return generate_features(self.prediction_object, pr, stopwords, self.fingerprint,
-                                 self.dictionary, self.model, dict(), self.min_tok_len,
-                                 self.net_size_in_days)
+        return self.feature_generator.generate_features(self.prediction_object, pr, False)
 
 
 class Linker(object):
-    def __init__(self, net_size_in_days, min_tok_len, undersample_multiplicity):
+    def __init__(self, net_size_in_days, undersample_multiplicity, min_tok_len=None, stopwords=None):
         self.repository_obj = None
         self.truth = None
         self.clf = None
         self.fingerprint = None
         self.model = None
         self.dictionary = None
+        self.feature_generator = None
         self.prediction_threshold = 1e-5
+        self.stopwords = stopwords
         self.net_size_in_days = net_size_in_days
         self.min_tok_len = min_tok_len
         self.undersample_multiplicity = undersample_multiplicity
 
-    def fit(self, repository_obj, truth):
+    def fit(self, repository_obj, truth,
+            use_sim_cs, use_sim_j, use_social, use_temporal, use_file, use_pr_only, use_issue_only):
         self.repository_obj = repository_obj
         self.truth = truth
-        self.fingerprint = generate_dev_fingerprint(self.repository_obj)
-        self.model, self.dictionary = generate_tfidf(self.repository_obj, stopwords, self.min_tok_len)
-        self.clf = train_classifier(generate_training_data(self.repository_obj, stopwords, self.fingerprint,
-                                                           self.dictionary, self.model, self.truth,
-                                                           self.undersample_multiplicity, self.min_tok_len,
-                                                           self.net_size_in_days))
+
+        similarity_config = None
+        temporal_config = None
+        if use_sim_cs or use_sim_j or use_file:
+            assert self.min_tok_len
+            assert self.stopwords
+            self.model, self.dictionary = generate_tfidf(self.repository_obj, self.stopwords, self.min_tok_len)
+            similarity_config = {
+                'dict': self.dictionary,
+                'model': self.model,
+                'min_len': self.min_tok_len,
+                'stopwords': self.stopwords,
+            }
+        if use_temporal:
+            self.fingerprint = generate_dev_fingerprint(self.repository_obj)
+            temporal_config = {
+                'fingerprint': self.fingerprint,
+                'net_size_in_days': self.net_size_in_days,
+            }
+        self.feature_generator = FeatureGenerator(
+            use_file=use_file,
+            use_sim_cs=use_sim_cs,
+            use_sim_j=use_sim_j,
+            use_social=use_social,
+            use_temporal=use_temporal,
+            use_pr_only=use_pr_only,
+            use_issue_only=use_issue_only,
+            similarity_config=similarity_config,
+            temporal_config=temporal_config,
+        )
+        self.clf = train_classifier(generate_training_data(self.repository_obj,
+                                                           self.feature_generator,
+                                                           self.net_size_in_days,
+                                                           truth,
+                                                           self.undersample_multiplicity))
 
     def predict(self, prediction_object):
         threshold = self.prediction_threshold
@@ -154,24 +169,16 @@ class Linker(object):
 
             if len(open_issues) > 128:
                 with Pool(processes=os.cpu_count() - 1) as wp:
-                    for point in wp.map(func=Issue_Closure(prediction_object, stopwords, self.fingerprint,
-                                                           self.dictionary, self.model, self.min_tok_len,
-                                                           self.net_size_in_days), iterable=open_issues, chunksize=128):
+                    for point in wp.map(func=Issue_Closure(prediction_object, self.feature_generator),
+                                        iterable=open_issues, chunksize=128):
                         prediction_data.append(point)
             else:
                 for issue in open_issues:
-                    prediction_data.append(generate_features(issue, prediction_object, stopwords, self.fingerprint,
-                                                             self.dictionary, self.model, dict(), self.min_tok_len,
-                                                             self.net_size_in_days))
+                    prediction_data.append(self.feature_generator.generate_features(issue, prediction_object, False))
 
             for point in prediction_data:
-                probabilities = self.clf.predict_proba(np.array((point.engagement,
-                                                                 point.cosine_tt,
-                                                                 point.cosine,
-                                                                 point.lag,
-                                                                 point.lag_close,
-                                                                 point.lag_open,
-                                                                 point.pr_commits,)).reshape(1, -1))
+                probabilities = self.clf.predict_proba(np.array(tuple([v for k, v in point.items() if k != 'linked']))
+                                                       .reshape(1, -1))
                 if point.pr == 'null_issue':
                     threshold = max(threshold, probabilities[0][1])
                 else:
@@ -198,24 +205,16 @@ class Linker(object):
 
             if len(candidates) > 128:
                 with Pool(processes=os.cpu_count() - 1) as wp:
-                    for point in wp.map(func=PR_Closure(prediction_object, stopwords, self.fingerprint,
-                                                        self.dictionary, self.model, self.min_tok_len,
-                                                        self.net_size_in_days), iterable=candidates, chunksize=128):
+                    for point in wp.map(func=PR_Closure(prediction_object, self.feature_generator),
+                                        iterable=candidates, chunksize=128):
                         prediction_data.append(point)
             else:
                 for pr in candidates:
-                        prediction_data.append(generate_features(prediction_object, pr, stopwords, self.fingerprint,
-                                                                 self.dictionary, self.model, dict(), self.min_tok_len,
-                                                                 self.net_size_in_days))
+                    prediction_data.append(self.feature_generator.generate_features(prediction_object, pr, False))
 
             for point in prediction_data:
-                probabilities = self.clf.predict_proba(np.array((point.engagement,
-                                                                 point.cosine_tt,
-                                                                 point.cosine,
-                                                                 point.lag,
-                                                                 point.lag_close,
-                                                                 point.lag_open,
-                                                                 point.pr_commits,)).reshape(1, -1))
+                probabilities = self.clf.predict_proba(np.array(tuple([v for k, v in point.items() if k != 'linked']))
+                                                       .reshape(1, -1))
                 if point.pr == 'null_pr':
                     threshold = max(threshold, probabilities[0][1])
                 else:
@@ -418,7 +417,8 @@ if __name__ == '__main__':
         # 'palantir_plottable',
         'tensorflow_tensorflow',
     ]
-
+    stopwords = utils_.GitMineUtils.STOPWORDS \
+                + list(set(java_reserved + c_reserved + cpp_reserved + javascript_reserved + python_reserved))
     for project in projects:
         n_batches = 5 if project == 'PhilJay_MPAndroidChart' else 7
         project_dir = location_format % project
@@ -430,9 +430,11 @@ if __name__ == '__main__':
 
         batches = generate_batches(repo, n_batches)
         for i in range(n_batches - 2):
-            linker = Linker(net_size_in_days=14, min_tok_len=2, undersample_multiplicity=100)
+            linker = Linker(net_size_in_days=14, min_tok_len=2, undersample_multiplicity=100, stopwords=stopwords)
             training = batches[i] + batches[i + 1]
-            linker.fit(inflate_events(training, repo.langs, repo.name), truth)
+            linker.fit(inflate_events(training, repo.langs, repo.name), truth,
+                       use_issue_only=False, use_pr_only=True, use_temporal=True, use_sim_cs=False, use_sim_j=False,
+                       use_file=False, use_social=True)
             scores = linker.validate_over_suffix(batches[i + 2])
             scores_dict = dict()
             for pr_id, predictions in scores:
