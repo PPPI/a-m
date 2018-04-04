@@ -250,16 +250,16 @@ def generate_training_data_seq(training_repo_: Repository,
     # Explicitly add no_link to the training data
     issue_map = {i[0]: any([t[-1] for t in arg_list]) for i in arg_list}
     pr_map = {i[1]: any([t[-1] for t in arg_list]) for i in arg_list}
-    for issue, any_link in issue_map.values():
+    for issue, any_link in issue_map.items():
         if not any_link:
             arg_list.append((issue, null_pr, True))
-    for pr, any_link in pr_map.values():
+    for pr, any_link in pr_map.items():
         if not any_link:
             arg_list.append((null_issue, pr, True))
 
     arg_list = undersample_naively(mult_, arg_list)
 
-    for i, p, stopwords_, fingerprint_, dict_, model_, linked in arg_list:
+    for i, p, linked in arg_list:
         training_data_.append(feature_generator.generate_features(i, p, linked))
     return training_data_
 
@@ -284,6 +284,7 @@ def generate_tfidf(repository: Repository, stopwords_: Set[str], min_len) -> Tup
         texts.append(text_pipeline(issue_, stopwords_, min_len))
 
     dictionary_ = Dictionary(texts)
+    dictionary_.filter_extremes(no_below=2, no_above=0.95)
     working_corpus = [dictionary_.doc2bow(text, return_missing=True) for text in texts]
     # Convert UNK from explicit dictionary to UNK token (id = -1)
     working_corpus = [val[0] + [(-1, sum(val[1].values()))] for val in working_corpus]
