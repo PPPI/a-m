@@ -56,38 +56,39 @@ class FeatureGenerator(object):
         pr_id = pr.number
         features = {'issue': issue_id, 'pr': pr_id, 'linked': linked}
         if self.use_sim_cs or self.use_sim_j or self.use_file:
-            full_issue_text = text_pipeline(issue_, self.stopwords_, self.min_len)
+            full_issue_text = text_pipeline(issue_, self.stopwords, self.min_len)
         if self.use_sim_cs or self.use_sim_j:
-            full_pr_text = text_pipeline(pr, self.stopwords_, self.min_len)
-            pr_title_text = preprocess_text(pr.title, self.stopwords_, self.min_len)
-            pr_desc_text = preprocess_text(pr.comments[0].body, self.stopwords_, self.min_len)
-            issue_title_text = preprocess_text(issue_.title, self.stopwords_, self.min_len)
-            issue_report_text = preprocess_text(issue_.original_post.body, self.stopwords_, self.min_len)
+            full_pr_text = text_pipeline(pr, self.stopwords, self.min_len)
+            pr_title_text = preprocess_text(pr.title, self.stopwords, self.min_len)
+            pr_desc_text = preprocess_text(pr.comments[0].body, self.stopwords, self.min_len)
+            issue_title_text = preprocess_text(issue_.title, self.stopwords, self.min_len)
+            issue_report_text = preprocess_text(issue_.original_post.body, self.stopwords, self.min_len)
 
         if self.use_sim_cs:
-            pr_vector = np.zeros((len(self.dict_.token2id),))
-            for index, value in self.model_[self.dict_.doc2bow(full_pr_text)]:
+            # The vector is 1 longer than the number of ids so we can have UNK at the end (-1)
+            pr_vector = np.zeros((len(self.dictionary.token2id) + 1,))
+            for index, value in self.model[self.dictionary.doc2bow(full_pr_text)]:
                 pr_vector[index] += value
-            i_vector = np.zeros((len(self.dict_.token2id),))
-            for index, value in self.model_[self.dict_.doc2bow(full_issue_text)]:
+            i_vector = np.zeros((len(self.dictionary.token2id) + 1,))
+            for index, value in self.model[self.dictionary.doc2bow(full_issue_text)]:
                 i_vector[index] += value
 
             cosine = cosine_similarity(pr_vector, i_vector)
 
-            pr_title_vector = np.zeros((len(self.dict_.token2id),))
-            for index, value in self.model_[self.dict_.doc2bow(pr_title_text)]:
+            pr_title_vector = np.zeros((len(self.dictionary.token2id) + 1,))
+            for index, value in self.model[self.dictionary.doc2bow(pr_title_text)]:
                 pr_title_vector[index] += value
-            pr_comment_vector = np.zeros((len(self.dict_.token2id),))
+            pr_comment_vector = np.zeros((len(self.dictionary.token2id) + 1,))
             try:
-                for index, value in self.model_[self.dict_.doc2bow(pr_desc_text)]:
+                for index, value in self.model[self.dictionary.doc2bow(pr_desc_text)]:
                     pr_comment_vector[index] += value
             except IndexError:
                 pass
-            i_title_vector = np.zeros((len(self.dict_.token2id),))
-            for index, value in self.model_[self.dict_.doc2bow(issue_title_text)]:
+            i_title_vector = np.zeros((len(self.dictionary.token2id) + 1,))
+            for index, value in self.model[self.dictionary.doc2bow(issue_title_text)]:
                 i_title_vector[index] += value
-            i_comment_vector = np.zeros((len(self.dict_.token2id),))
-            for index, value in self.model_[self.dict_.doc2bow(issue_report_text)]:
+            i_comment_vector = np.zeros((len(self.dictionary.token2id) + 1,))
+            for index, value in self.model[self.dictionary.doc2bow(issue_report_text)]:
                 i_comment_vector[index] += value
 
             cosine_tt = cosine_similarity(pr_title_vector, i_title_vector)
@@ -150,15 +151,15 @@ class FeatureGenerator(object):
             try:
                 lag = min([abs(entity.timestamp - pr.comments[0].timestamp)
                            if entity.timestamp and pr.comments
-                           else timedelta(seconds=self.fingerprint_['AVG'])
+                           else timedelta(seconds=self.fingerprint['AVG'])
                            for entity in [issue_.original_post]
                            + [reply for reply in issue_.replies if reply.author == author]
                            + [state for state in issue_.states if state.to_ == IssueStates.closed]]).total_seconds()
                 # Scale lag on a per developer basis
                 try:
-                    lag /= self.fingerprint_[author] if self.fingerprint_[author] > .0 else self.fingerprint_['AVG']
+                    lag /= self.fingerprint[author] if self.fingerprint[author] > .0 else self.fingerprint['AVG']
                 except KeyError:
-                    lag /= self.fingerprint_['AVG']
+                    lag /= self.fingerprint['AVG']
                 # And centre around 0
                 lag -= 1
             except ValueError:
