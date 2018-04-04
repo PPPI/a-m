@@ -96,7 +96,7 @@ def process_a_commit(hash_: str, name: str, path: str) -> Commit:
                 current_diff += curr_line
                 diffs.append(current_diff.strip())
                 break
-            elif curr_line.startswith('diff --git a'):  # New diff for this commit
+            elif curr_line.startswith('diff --git'):  # New diff for this commit
                 if current_diff != '':
                     diffs.append(current_diff.strip())
                 current_diff = curr_line

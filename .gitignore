@@ -4,3 +4,4 @@
 /.idea/*
 **/__pycache__
 /chrome_entry/debug.txt
+.ipynb_checkpoints/*
