@@ -9,10 +9,10 @@ import pandas as pd
 def evaluate_at_threshold(result, th, top_k, truth):
     if top_k == 'inf':
         result_ = [(pr, sorted([(issue, prob) for issue, prob in pred if prob >= th],
-                               reverse=True, key=lambda p: (p[1], p[0]))) for pr, pred in result]
+                               reverse=True, key=lambda p: (p[1], p[0]))) for pr, pred in result.items()]
     else:
         result_ = [(pr, sorted([(issue, prob) for issue, prob in pred if prob >= th],
-                               reverse=True, key=lambda p: (p[1], p[0]))[:top_k]) for pr, pred in result]
+                               reverse=True, key=lambda p: (p[1], p[0]))[:top_k]) for pr, pred in result.items()]
     hit = 0
     ap = 0
     mrr = .0
@@ -70,17 +70,17 @@ if __name__ == '__main__':
     location_format = '../data/dev_set/%s.json'
     n_fold = 1
     projects = [
-        # 'PhilJay_MPAndroidChart',
+        'PhilJay_MPAndroidChart',
         # 'ReactiveX_RxJava',
         # 'google_guava',
         # 'facebook_react',
-        'palantir_plottable',
+        # 'palantir_plottable',
         # 'tensorflow_tensorflow', # Dev set end
     ]
     for project in projects:
         results = list()
         for fold in range(n_fold):
-            with open((location_format[:-5] + '_no_split_results_f%d.txt') % (project, fold)) as f:
+            with open((location_format[:-5] + '_results_f%d_NullExplicit_UNKExplicit.txt') % (project, fold)) as f:
                 result_str = f.read()
             result = ast.literal_eval(result_str)
             results.append((fold, result))
@@ -100,9 +100,8 @@ if __name__ == '__main__':
 
         data = {'Threshold': list(), 'K': list(), 'Hit-rate': list(), 'Average Precision': list(),
                 'Mean Reciprocal Rank': list(), 'Discounted Cumulative Gain': list(),
-                'False Positive Rate': list(), 'False Negative Rate': list(),
-                'Subsequent Links Found': list()}
-        for result in results:
+                'False Positive Rate': list(), 'False Negative Rate': list()}
+        for result in results.values():
             for th in np.arange(.0, 1., step=.01):
                 for top_k in [1, 3, 5, 7, 10, 15, 20, 'inf']:
                     hit, ap, mrr, dcg, fpr, fnr = evaluate_at_threshold(result, th, top_k, truth)
@@ -116,4 +115,4 @@ if __name__ == '__main__':
                     data['False Positive Rate'].append(fpr)
                     data['False Negative Rate'].append(fnr)
 
-        pd.DataFrame(data=data).to_csv((location_format[:-len('.json')] + '_results_interpreted.csv') % project)
+        pd.DataFrame(data=data).to_csv((location_format[:-len('.json')] + '_results_interpreted_Null_Unk.csv') % project)
