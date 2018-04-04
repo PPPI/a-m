@@ -194,17 +194,19 @@ def generate_pi_wrapper(args):
     return generate_pr_issue_interest_pairs(*args)
 
 
-def feature_closure(feature_generator):
-    def feature_wrapper(args):
-        return feature_generator.generate_features(*args)
-    return feature_wrapper
+class Feature_Closure(object):
+    def __init__(self, feature_generator):
+        self.feature_generator = feature_generator
+
+    def __call__(self, args):
+        self.feature_generator.generate_features(*args)
 
 
 def generate_training_data(training_repo_: Repository,
-                               feature_generator,
-                               net_size_in_days,
-                               truth_,
-                               mult_) -> List[Dict[str, Any]]:
+                           feature_generator,
+                           net_size_in_days,
+                           truth_,
+                           mult_) -> List[Dict[str, Any]]:
     with Pool(processes=multiprocessing.cpu_count() - 1) as wp:
         arg_list = list()
         for v in wp.imap_unordered(generate_pi_wrapper,
@@ -227,9 +229,8 @@ def generate_training_data(training_repo_: Repository,
 
         arg_list = undersample_naively(mult_, arg_list)
 
-        feature_wrapper = feature_closure(feature_generator)
         training_data_ = list()
-        for point in wp.imap_unordered(feature_wrapper, arg_list, chunksize=128):
+        for point in wp.imap_unordered(Feature_Closure(feature_generator), arg_list, chunksize=128):
             training_data_.append(point)
     return training_data_
 
