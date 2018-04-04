@@ -194,7 +194,9 @@ class FeatureGenerator(object):
             features['files_touched_by_pr'] = len(pr.diffs)
 
         if self.use_issue_only:
-            # TODO: Add issue only features
-            pass
+            features['report_size'] = len(issue_.original_post)
+            features['participants'] = len(set([c.author for c in issue_.replies + [issue_.original_post]]))
+            features['bounces'] = len([s.to_ == IssueStates.open for s in issue_.states])
+            features['existing_links'] = len(issue_.commits)
 
         return features
