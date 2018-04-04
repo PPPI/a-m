@@ -216,8 +216,8 @@ def generate_training_data(training_repo_: Repository,
                 arg_list.append((i, p, linked))
 
         # Explicitly add no_link to the training data
-        issue_map = {i[0]: any([t[6] for t in arg_list]) for i in arg_list}
-        pr_map = {i[1]: any([t[6] for t in arg_list]) for i in arg_list}
+        issue_map = {i[0]: any([t[-1] for t in arg_list]) for i in arg_list}
+        pr_map = {i[1]: any([t[-1] for t in arg_list]) for i in arg_list}
         for issue, any_link in issue_map.items():
             if not any_link:
                 arg_list.append((issue, null_pr, True))
@@ -247,8 +247,8 @@ def generate_training_data_seq(training_repo_: Repository,
             arg_list.append((i, p, linked))
 
     # Explicitly add no_link to the training data
-    issue_map = {i[0]: any([t[6] for t in arg_list]) for i in arg_list}
-    pr_map = {i[1]: any([t[6] for t in arg_list]) for i in arg_list}
+    issue_map = {i[0]: any([t[-1] for t in arg_list]) for i in arg_list}
+    pr_map = {i[1]: any([t[-1] for t in arg_list]) for i in arg_list}
     for issue, any_link in issue_map.values():
         if not any_link:
             arg_list.append((issue, null_pr, True))
