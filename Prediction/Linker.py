@@ -13,7 +13,8 @@ from github import Github
 
 from Prediction.feature_generation import FeatureGenerator
 from Prediction.gitScraper import get_all_commit_hashes, process_a_commit
-from Prediction.training_utils import train_classifier, generate_training_data, generate_dev_fingerprint, \
+from Prediction.training_utils import generate_training_data_seq as generate_training_data
+from Prediction.training_utils import train_classifier, generate_dev_fingerprint, \
     generate_tfidf, update, inflate_events, generate_batches, null_issue, flatten_events, null_pr
 from Util import utils_
 from Util.ReservedKeywords import java_reserved, c_reserved, cpp_reserved, javascript_reserved, python_reserved
@@ -93,7 +94,8 @@ class PR_Closure(object):
 
 
 class Linker(object):
-    def __init__(self, net_size_in_days, undersample_multiplicity, min_tok_len=None, stopwords=None):
+    def __init__(self, net_size_in_days, undersample_multiplicity, feature_config, predictions_between_updates=None,
+                 min_tok_len=None, stopwords=None):
         self.repository_obj = None
         self.truth = None
         self.clf = None
@@ -102,21 +104,31 @@ class Linker(object):
         self.dictionary = None
         self.feature_generator = None
         self.prediction_threshold = 1e-5
+        self.predictions_from_last_tf_idf_update = 0
+        self.predictions_between_updates = predictions_between_updates
         self.stopwords = stopwords
         self.net_size_in_days = net_size_in_days
         self.min_tok_len = min_tok_len
         self.undersample_multiplicity = undersample_multiplicity
+        self.use_sim_cs = feature_config['use_sim_cs']
+        self.use_sim_j = feature_config['use_sim_j']
+        self.use_social = feature_config['use_social']
+        self.use_temporal = feature_config['use_temporal']
+        self.use_file = feature_config['use_file']
+        self.use_pr_only = feature_config['use_pr_only']
+        self.use_issue_only = feature_config['use_issue_only']
+        if self.use_sim_cs or self.use_sim_j or self.use_file:
+            assert self.predictions_between_updates
+            assert self.min_tok_len
+            assert self.stopwords
 
-    def fit(self, repository_obj, truth,
-            use_sim_cs, use_sim_j, use_social, use_temporal, use_file, use_pr_only, use_issue_only):
+    def fit(self, repository_obj, truth):
         self.repository_obj = repository_obj
         self.truth = truth
 
         similarity_config = None
         temporal_config = None
-        if use_sim_cs or use_sim_j or use_file:
-            assert self.min_tok_len
-            assert self.stopwords
+        if self.use_sim_cs or self.use_sim_j or self.use_file:
             self.model, self.dictionary = generate_tfidf(self.repository_obj, self.stopwords, self.min_tok_len)
             similarity_config = {
                 'dict': self.dictionary,
@@ -124,20 +136,20 @@ class Linker(object):
                 'min_len': self.min_tok_len,
                 'stopwords': self.stopwords,
             }
-        if use_temporal:
+        if self.use_temporal:
             self.fingerprint = generate_dev_fingerprint(self.repository_obj)
             temporal_config = {
                 'fingerprint': self.fingerprint,
                 'net_size_in_days': self.net_size_in_days,
             }
         self.feature_generator = FeatureGenerator(
-            use_file=use_file,
-            use_sim_cs=use_sim_cs,
-            use_sim_j=use_sim_j,
-            use_social=use_social,
-            use_temporal=use_temporal,
-            use_pr_only=use_pr_only,
-            use_issue_only=use_issue_only,
+            use_file=self.use_file,
+            use_sim_cs=self.use_sim_cs,
+            use_sim_j=self.use_sim_j,
+            use_social=self.use_social,
+            use_temporal=self.use_temporal,
+            use_pr_only=self.use_pr_only,
+            use_issue_only=self.use_issue_only,
             similarity_config=similarity_config,
             temporal_config=temporal_config,
         )
@@ -223,6 +235,36 @@ class Linker(object):
             predictions = sorted([p for p in predictions if p[1] >= threshold],
                                  key=lambda p: (p[1], p[0]),
                                  reverse=True)
+            if self.use_sim_cs or self.use_sim_j or self.use_file:
+                if self.predictions_from_last_tf_idf_update < self.predictions_between_updates:
+                    self.predictions_from_last_tf_idf_update += 1
+                else:
+                    self.predictions_from_last_tf_idf_update = 0
+                    temporal_config = None
+                    self.model, self.dictionary = generate_tfidf(self.repository_obj, self.stopwords, self.min_tok_len)
+                    similarity_config = {
+                        'dict': self.dictionary,
+                        'model': self.model,
+                        'min_len': self.min_tok_len,
+                        'stopwords': self.stopwords,
+                    }
+                    if self.use_temporal:
+                        self.fingerprint = generate_dev_fingerprint(self.repository_obj)
+                        temporal_config = {
+                            'fingerprint': self.fingerprint,
+                            'net_size_in_days': self.net_size_in_days,
+                        }
+                    self.feature_generator = FeatureGenerator(
+                        use_file=self.use_file,
+                        use_sim_cs=self.use_sim_cs,
+                        use_sim_j=self.use_sim_j,
+                        use_social=self.use_social,
+                        use_temporal=self.use_temporal,
+                        use_pr_only=self.use_pr_only,
+                        use_issue_only=self.use_issue_only,
+                        similarity_config=similarity_config,
+                        temporal_config=temporal_config,
+                    )
             return prediction_object.id_, predictions
 
     def update_and_predict(self, event):
@@ -412,11 +454,20 @@ class Linker(object):
 if __name__ == '__main__':
     location_format = '../data/dev_set/%s.json'
     projects = [
-        # 'PhilJay_MPAndroidChart',
+        'PhilJay_MPAndroidChart',
         # 'ReactiveX_RxJava',
         # 'palantir_plottable',
-        'tensorflow_tensorflow',
+        # 'tensorflow_tensorflow',
     ]
+    config = {
+        'use_issue_only': False,
+        'use_pr_only': True,
+        'use_temporal': True,
+        'use_sim_cs': False,
+        'use_sim_j': False,
+        'use_file': False,
+        'use_social': True
+    }
     stopwords = utils_.GitMineUtils.STOPWORDS \
                 + list(set(java_reserved + c_reserved + cpp_reserved + javascript_reserved + python_reserved))
     for project in projects:
@@ -430,11 +481,10 @@ if __name__ == '__main__':
 
         batches = generate_batches(repo, n_batches)
         for i in range(n_batches - 2):
-            linker = Linker(net_size_in_days=14, min_tok_len=2, undersample_multiplicity=100, stopwords=stopwords)
+            linker = Linker(net_size_in_days=14, min_tok_len=2, undersample_multiplicity=100, stopwords=stopwords,
+                            feature_config=config, predictions_between_updates=100)
             training = batches[i] + batches[i + 1]
-            linker.fit(inflate_events(training, repo.langs, repo.name), truth,
-                       use_issue_only=False, use_pr_only=True, use_temporal=True, use_sim_cs=False, use_sim_j=False,
-                       use_file=False, use_social=True)
+            linker.fit(inflate_events(training, repo.langs, repo.name), truth)
             scores = linker.validate_over_suffix(batches[i + 2])
             scores_dict = dict()
             for pr_id, predictions in scores:
@@ -446,5 +496,5 @@ if __name__ == '__main__':
                 scores_dict[pr_id] = list(scores_dict[pr_id])
                 scores_dict[pr_id] = sorted(scores_dict[pr_id], reverse=True, key=lambda p: (p[1], p[0]))
 
-            with open(project_dir[:-5] + ('_results_f%d.txt' % i), 'w') as f:
+            with open(project_dir[:-5] + ('_results_f%d_NullExplicit_UNKExplicit.txt' % i), 'w') as f:
                 f.write(str(scores_dict))
