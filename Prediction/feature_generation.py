@@ -27,7 +27,7 @@ def cosine_similarity(vec1, vec2):
 
 def jaccard_similarity(set1, set2):
     return len(set1.intersection(set2)) / len(set1.union(set2)) \
-            if len(set1.union(set2)) > 0 else .0
+        if len(set1.union(set2)) > 0 else .0
 
 
 class FeatureGenerator(object):
@@ -60,7 +60,8 @@ class FeatureGenerator(object):
         if self.use_sim_cs or self.use_sim_j:
             full_pr_text = text_pipeline(pr, self.stopwords, self.min_len)
             pr_title_text = preprocess_text(pr.title, self.stopwords, self.min_len)
-            pr_desc_text = preprocess_text(pr.comments[0].body, self.stopwords, self.min_len)
+            pr_desc_text = preprocess_text(pr.comments[0].body, self.stopwords, self.min_len) \
+                if len(pr.comments) > 0 else []
             issue_title_text = preprocess_text(issue_.title, self.stopwords, self.min_len)
             issue_report_text = preprocess_text(issue_.original_post.body, self.stopwords, self.min_len)
 
@@ -139,7 +140,9 @@ class FeatureGenerator(object):
                               in [issue_.original_post] + issue_.replies
                               if reply.author == author]) / (len(issue_.replies) + 1)
             in_top_2 = author in [a for a, _
-                                  in Counter(map(lambda c: c.author, [issue_.original_post] + issue_.replies)).most_common(2)]
+                                  in
+                                  Counter(map(lambda c: c.author, [issue_.original_post] + issue_.replies)).most_common(
+                                      2)]
             comments = engagement > .0
             features['is_reporter'] = reporter
             features['is_assignee'] = assignee
@@ -195,7 +198,7 @@ class FeatureGenerator(object):
             features['files_touched_by_pr'] = len(pr.diffs)
 
         if self.use_issue_only:
-            features['report_size'] = len(issue_.original_post)
+            features['report_size'] = len(issue_.original_post.body)
             features['participants'] = len(set([c.author for c in issue_.replies + [issue_.original_post]]))
             features['bounces'] = len([s.to_ == IssueStates.open for s in issue_.states])
             features['existing_links'] = len(issue_.commits)

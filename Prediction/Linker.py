@@ -161,6 +161,7 @@ class Linker(object):
 
     def predict(self, prediction_object):
         threshold = self.prediction_threshold
+        predictions = list()
         if isinstance(prediction_object, PullRequest):
             predictions = list()
             # Predict
@@ -237,36 +238,36 @@ class Linker(object):
             predictions = sorted([p for p in predictions if p[1] >= threshold],
                                  key=lambda p: (p[1], p[0]),
                                  reverse=True)
-            if self.use_sim_cs or self.use_sim_j or self.use_file:
-                if self.predictions_from_last_tf_idf_update < self.predictions_between_updates:
-                    self.predictions_from_last_tf_idf_update += 1
-                else:
-                    self.predictions_from_last_tf_idf_update = 0
-                    temporal_config = None
-                    self.model, self.dictionary = generate_tfidf(self.repository_obj, self.stopwords, self.min_tok_len)
-                    similarity_config = {
-                        'dict': self.dictionary,
-                        'model': self.model,
-                        'min_len': self.min_tok_len,
-                        'stopwords': self.stopwords,
+        if self.use_sim_cs or self.use_sim_j or self.use_file:
+            if self.predictions_from_last_tf_idf_update < self.predictions_between_updates:
+                self.predictions_from_last_tf_idf_update += 1
+            else:
+                self.predictions_from_last_tf_idf_update = 0
+                temporal_config = None
+                self.model, self.dictionary = generate_tfidf(self.repository_obj, self.stopwords, self.min_tok_len)
+                similarity_config = {
+                    'dict': self.dictionary,
+                    'model': self.model,
+                    'min_len': self.min_tok_len,
+                    'stopwords': self.stopwords,
+                }
+                if self.use_temporal:
+                    self.fingerprint = generate_dev_fingerprint(self.repository_obj)
+                    temporal_config = {
+                        'fingerprint': self.fingerprint,
+                        'net_size_in_days': self.net_size_in_days,
                     }
-                    if self.use_temporal:
-                        self.fingerprint = generate_dev_fingerprint(self.repository_obj)
-                        temporal_config = {
-                            'fingerprint': self.fingerprint,
-                            'net_size_in_days': self.net_size_in_days,
-                        }
-                    self.feature_generator = FeatureGenerator(
-                        use_file=self.use_file,
-                        use_sim_cs=self.use_sim_cs,
-                        use_sim_j=self.use_sim_j,
-                        use_social=self.use_social,
-                        use_temporal=self.use_temporal,
-                        use_pr_only=self.use_pr_only,
-                        use_issue_only=self.use_issue_only,
-                        similarity_config=similarity_config,
-                        temporal_config=temporal_config,
-                    )
+                self.feature_generator = FeatureGenerator(
+                    use_file=self.use_file,
+                    use_sim_cs=self.use_sim_cs,
+                    use_sim_j=self.use_sim_j,
+                    use_social=self.use_social,
+                    use_temporal=self.use_temporal,
+                    use_pr_only=self.use_pr_only,
+                    use_issue_only=self.use_issue_only,
+                    similarity_config=similarity_config,
+                    temporal_config=temporal_config,
+                )
             return prediction_object.id_, predictions
 
     def update_and_predict(self, event):
@@ -366,6 +367,7 @@ class Linker(object):
             self.repository_obj.name, self.repository_obj.langs), self.truth)
         self.trim_truth()
 
+    # XXX: Update persistance methods to store all new data and fields
     def persist_to_disk(self, path):
         """
         Function to save the class to disc
@@ -462,12 +464,12 @@ if __name__ == '__main__':
         # 'tensorflow_tensorflow',
     ]
     config = {
-        'use_issue_only': False,
+        'use_issue_only': True,
         'use_pr_only': True,
         'use_temporal': True,
-        'use_sim_cs': False,
-        'use_sim_j': False,
-        'use_file': False,
+        'use_sim_cs': True,
+        'use_sim_j': True,
+        'use_file': True,
         'use_social': True
     }
     stopwords = utils_.GitMineUtils.STOPWORDS \
@@ -498,5 +500,5 @@ if __name__ == '__main__':
                 scores_dict[pr_id] = list(scores_dict[pr_id])
                 scores_dict[pr_id] = sorted(scores_dict[pr_id], reverse=True, key=lambda p: (p[1], p[0]))
 
-            with open(project_dir[:-5] + ('_results_f%d_NullExplicit_UNKExplicit.txt' % i), 'w') as f:
+            with open(project_dir[:-5] + ('_results_f%d_NullExplicit_UNKExplicit_FullFeatures.txt' % i), 'w') as f:
                 f.write(str(scores_dict))
