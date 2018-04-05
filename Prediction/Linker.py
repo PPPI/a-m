@@ -270,6 +270,9 @@ class Linker(object):
                 )
             return prediction_object.id_, predictions
 
+    def most_recent_sha(self):
+        return sorted(self.repository_obj.commits, key=lambda c: c.timestamp)[-1].c_hash
+
     def update_and_predict(self, event):
         if isinstance(event[1], Commit):
             if event[0] not in self.repository_obj.commits:
@@ -304,9 +307,10 @@ class Linker(object):
         links = list()
         # TODO: Record links as we add new entities
         for pr_ref in repo.get_pulls(state='all'):
-            if pr_ref.number in pr_numbers:
-                break
             pr = parse_pr_ref(pr_ref, self.repository_obj.name)
+            if pr_ref.number in pr_numbers:
+                old_pr = [pr for pr in self.repository_obj.prs if pr.number == pr_ref.number][0]
+                self.repository_obj.prs.remove(old_pr)
             self.repository_obj.prs.append(pr)
         for issue_ref in repo.get_issues(state='all', since=since):
             issue = parse_issue_ref(issue_ref)
