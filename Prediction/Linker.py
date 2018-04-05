@@ -367,7 +367,6 @@ class Linker(object):
             self.repository_obj.name, self.repository_obj.langs), self.truth)
         self.trim_truth()
 
-    # XXX: Update persistance methods to store all new data and fields
     def persist_to_disk(self, path):
         """
         Function to save the class to disc
@@ -382,6 +381,14 @@ class Linker(object):
             'min_tok_len': self.min_tok_len,
             'undersample_multiplicity': self.undersample_multiplicity,
             'prediction_threshold': self.prediction_threshold,
+            'use_sim_cs': self.use_sim_cs,
+            'use_sim_j': self.use_sim_j,
+            'use_social': self.use_social,
+            'use_temporal': self.use_temporal,
+            'use_file': self.use_file,
+            'use_pr_only': self.use_pr_only,
+            'use_issue_only': self.use_issue_only,
+            'predictions_between_updates': self.predictions_between_updates,
         }
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(os.path.join(path, 'config.json'), 'w') as f:
@@ -398,6 +405,8 @@ class Linker(object):
                 f.write(jsonpickle.encode(self.fingerprint))
         if self.model and self.dictionary:
             os.makedirs(os.path.join(path, 'tfidf'), exist_ok=True)
+            with open(os.path.join(path, name, 'stopwords_data.json'), 'w') as f:
+                f.write(jsonpickle.encode(self.stopwords))
             self.dictionary.save_as_text(os.path.join(path, 'tfidf', 'term2id.txt'))
             self.model.save(os.path.join(path, 'tfidf', 'model.tfidf'))
         # Persist CLF
@@ -418,6 +427,14 @@ class Linker(object):
         self.min_tok_len = params['min_tok_len']
         self.undersample_multiplicity = params['undersample_multiplicity']
         self.prediction_threshold = params['prediction_threshold']
+        self.use_sim_cs = params['use_sim_cs']
+        self.use_sim_j = params['use_sim_j']
+        self.use_social = params['use_social']
+        self.use_temporal = params['use_temporal']
+        self.use_file = params['use_file']
+        self.use_pr_only = params['use_pr_only']
+        self.use_issue_only = params['use_issue_only']
+        self.predictions_between_updates = params['predictions_between_updates']
         name = params['name']
         try:
             with open(os.path.join(path, name, 'repository_data.json')) as f:
@@ -434,12 +451,42 @@ class Linker(object):
         try:
             self.dictionary = Dictionary.load_from_text(os.path.join(path, 'tfidf', 'term2id.txt'))
             self.model = TfidfModel.load(os.path.join(path, 'tfidf', 'model.tfidf'))
+            with open(os.path.join(path, name, 'stopwords_data.json')) as f:
+                self.fingerprint = jsonpickle.decode(f.read())
         except FileNotFoundError:
             pass
         try:
             self.clf = pickle.load(open(os.path.join(path, 'clf_model', 'model.p'), 'rb'))
         except FileNotFoundError:
             pass
+        similarity_config = None
+        temporal_config = None
+        if self.use_sim_cs or self.use_sim_j or self.use_file:
+            assert self.dictionary
+            assert self.model
+            similarity_config = {
+                'dict': self.dictionary,
+                'model': self.model,
+                'min_len': self.min_tok_len,
+                'stopwords': self.stopwords,
+            }
+        if self.use_temporal:
+            self.fingerprint = generate_dev_fingerprint(self.repository_obj)
+            temporal_config = {
+                'fingerprint': self.fingerprint,
+                'net_size_in_days': self.net_size_in_days,
+            }
+        self.feature_generator = FeatureGenerator(
+            use_file=self.use_file,
+            use_sim_cs=self.use_sim_cs,
+            use_sim_j=self.use_sim_j,
+            use_social=self.use_social,
+            use_temporal=self.use_temporal,
+            use_pr_only=self.use_pr_only,
+            use_issue_only=self.use_issue_only,
+            similarity_config=similarity_config,
+            temporal_config=temporal_config,
+        )
 
     @staticmethod
     def load_from_disk(path):
