@@ -62,6 +62,9 @@ if __name__ == '__main__':
                     issue_ref = projects[project].get_issue(int(issue_id))
                     issue = parse_issue_ref(issue_ref)
                     _, suggestions = linkers[project].update_and_predict((issue, issue))
+                    suggestions = [(id_[len('issue_'):], '#%s: %s'
+                                    % (id_[len('issue_'):], linkers[project].id_to_title(id_)), prop)
+                                   for id_, prop in suggestions]
                     return list(suggestions)
                 except KeyError:
                     return None
@@ -71,15 +74,18 @@ if __name__ == '__main__':
                     pr_ref = projects[project].get_pull(int(pr_id))
                     pr = parse_pr_ref(pr_ref, project)
                     _, suggestions = linkers[project].update_and_predict((pr, pr))
+                    suggestions = [(id_[len('issue_'):], '#%s: %s'
+                                    % (id_[len('issue_'):], linkers[project].id_to_title(id_)), prop)
+                                   for id_, prop in suggestions]
                     return list(suggestions)
                 except KeyError:
                     return None
 
             def trigger_model_updates(self):
                 for model in models:
-                    linkers[model].update_from_github(last_update[model])
-                    last_update[model] = datetime.now
-                    linkers[model].update_from_local_git(git_locations[model], most_recent_sha[model])
+                    # linkers[model].update_from_github(last_update[model])
+                    # last_update[model] = datetime.now
+                    # linkers[model].update_from_local_git(git_locations[model], most_recent_sha[model])
                     linkers[model].forget_older_than(max_age_to_keep)
 
             def record_link(self, project, issue_id, pr_id):

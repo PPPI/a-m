@@ -17,6 +17,8 @@ if __name__ == '__main__':
                 + list(set(java_reserved + c_reserved + cpp_reserved + javascript_reserved + python_reserved))
     configs = itertools.product([False, True], repeat=7)
     for use_sim_cs, use_sim_j, use_file, use_social, use_temporal, use_pr_only, use_issue_only in configs:
+        if not (use_sim_cs or use_sim_j or use_file or use_social or use_temporal or use_pr_only or use_issue_only):
+            continue
         config = {
             'use_issue_only': use_issue_only,
             'use_pr_only': use_pr_only,

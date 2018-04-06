@@ -118,9 +118,9 @@ class Linker(object):
         self.use_pr_only = feature_config['use_pr_only']
         self.use_issue_only = feature_config['use_issue_only']
         if self.use_sim_cs or self.use_sim_j or self.use_file:
-            assert self.predictions_between_updates
-            assert self.min_tok_len
-            assert self.stopwords
+            assert self.predictions_between_updates is not None
+            assert self.min_tok_len is not None
+            assert self.stopwords is not None
 
     def fit(self, repository_obj, truth):
         self.repository_obj = repository_obj
@@ -269,6 +269,11 @@ class Linker(object):
                     temporal_config=temporal_config,
                 )
             return prediction_object.id_, predictions
+
+    def id_to_title(self, id_):
+        title = [e.title for e in self.repository_obj.issues + self.repository_obj.prs
+                 if (e.number if isinstance(e, PullRequest) else e.id_) == id_][0]
+        return title
 
     def most_recent_sha(self):
         return sorted(self.repository_obj.commits, key=lambda c: c.timestamp)[-1].c_hash
@@ -501,18 +506,28 @@ class Linker(object):
         """
         # We only want to ignore the type-check here
         # noinspection PyTypeChecker
-        stub = Linker(None, None, None)
+        stub = Linker(None, None, feature_config={
+            'use_issue_only': True,
+            'use_pr_only': True,
+            'use_temporal': True,
+            'use_sim_cs': True,
+            'use_sim_j': True,
+            'use_file': True,
+            'use_social': True
+        }, predictions_between_updates=-1, min_tok_len=-1, stopwords=set())
         stub.__load_from_disk(path)
         return stub
 
 
 if __name__ == '__main__':
+    import pandas as pd
+
     location_format = '../data/dev_set/%s.json'
     projects = [
         'PhilJay_MPAndroidChart',
-        # 'ReactiveX_RxJava',
-        # 'palantir_plottable',
-        # 'tensorflow_tensorflow',
+        'ReactiveX_RxJava',
+        'palantir_plottable',
+        'tensorflow_tensorflow',
     ]
     config = {
         'use_issue_only': True,
@@ -523,10 +538,21 @@ if __name__ == '__main__':
         'use_file': True,
         'use_social': True
     }
+    features_string = \
+        ('cosine cosine_tt cosine_tc cosine_ct cosine_cc ' if config['use_sim_cs'] else '') + \
+        ('jaccard jaccard_tt jaccard_tc jaccard_ct jaccard_cc ' if config['use_sim_j'] else '') + \
+        ('files_shared ' if config['use_file'] else '') + \
+        ('is_reporter is_assignee engagement in_top_2 in_comments ' if config['use_social'] else '') + \
+        ('developer_normalised_lag lag_from_issue_open_to_pr_submission lag_from_last_issue_update_to_pr_submission '
+         if config['use_temporal'] else '') + \
+        ('no_pr_desc branch_size files_touched_by_pr ' if config['use_pr_only'] else '') + \
+        ('report_size participants bounces existing_links ' if config['use_issue_only'] else '')
+    features_string = features_string.strip().split(' ')
+    index_feature_map = {i: features_string[i] for i in range(len(features_string))}
     stopwords = utils_.GitMineUtils.STOPWORDS \
                 + list(set(java_reserved + c_reserved + cpp_reserved + javascript_reserved + python_reserved))
     for project in projects:
-        n_batches = 5 if project == 'PhilJay_MPAndroidChart' else 7
+        n_batches = 7
         project_dir = location_format % project
         with open(project_dir) as f:
             repo = jsonpickle.decode(f.read())
@@ -540,6 +566,11 @@ if __name__ == '__main__':
                             feature_config=config, predictions_between_updates=100)
             training = batches[i] + batches[i + 1]
             linker.fit(inflate_events(training, repo.langs, repo.name), truth)
+            forest = linker.clf
+            importances = forest.feature_importances_
+            std = np.std([tree.feature_importances_ for tree in forest.estimators_], axis=0)
+            pd.DataFrame(data={'Feature': features_string, 'Importance': importances, 'STD': std}) \
+                .to_csv(project_dir[:-5] + ('_results_f%d_NullExplicit_UNKExplicit_FullFeatures_IMP.csv' % i))
             scores = linker.validate_over_suffix(batches[i + 2])
             scores_dict = dict()
             for pr_id, predictions in scores:
