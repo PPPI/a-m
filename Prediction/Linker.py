@@ -2,6 +2,7 @@ import pickle
 import os
 import math
 from multiprocessing.pool import Pool
+from time import sleep
 
 import jsonpickle
 import numpy as np
@@ -9,7 +10,6 @@ from datetime import timedelta, datetime
 
 from gensim.corpora import Dictionary
 from gensim.models import TfidfModel
-from github import Github
 
 from Prediction.feature_generation import FeatureGenerator
 from Prediction.gitScraper import get_all_commit_hashes, process_a_commit
@@ -19,6 +19,7 @@ from Prediction.training_utils import train_classifier, generate_dev_fingerprint
 from Util import utils_
 from Util.ReservedKeywords import java_reserved, c_reserved, cpp_reserved, javascript_reserved, python_reserved
 from Util.github_api_methods import parse_pr_ref, parse_issue_ref
+from Util.heuristic_methods import extract_issue_numbers
 from gitMine.VCClasses import IssueStates, Commit, Issue, PullRequest
 
 
@@ -91,6 +92,16 @@ class PR_Closure(object):
 
     def __call__(self, pr):
         return self.feature_generator.generate_features(self.prediction_object, pr, False)
+
+
+def __try_and_get__(via, max_attempts, args):
+    attempt = 0
+    while attempt < max_attempts:
+        try:
+            return via(*args)
+        except Exception:
+            sleep(2**attempt)
+        attempt += 1
 
 
 class Linker(object):
@@ -278,6 +289,9 @@ class Linker(object):
     def most_recent_sha(self):
         return sorted(self.repository_obj.commits, key=lambda c: c.timestamp)[-1].c_hash
 
+    def most_recent_timestamp(self):
+        return sorted(flatten_events(self.repository_obj), key=lambda e: e[0].timestamp)[-1][0].timestamp
+
     def update_and_predict(self, event):
         if isinstance(event[1], Commit):
             if event[0] not in self.repository_obj.commits:
@@ -299,36 +313,46 @@ class Linker(object):
                 scores.append(result)
         return scores
 
-    def update_from_github(self, since):
+    def update_from_github(self, gh, since):
         """
         Update the PR and Issue internal state of the backend using the GitHub REST API
+        :param gh: A GitHub client to use during the update
         :param since: Only issues updated at or after this time are returned.
                       This is a timestamp in ISO 8601 format: YYYY-MM-DDTHH:MM:SSZ.
         """
-        gh = Github()
-        repo = gh.get_repo(self.repository_obj.name)
+        repo = gh.get_repo(self.repository_obj.name.replace('_', '/')[1:])
         pr_numbers = [pr.number for pr in self.repository_obj.prs]
         issue_ids = [issue.id_ for issue in self.repository_obj.issues]
-        links = list()
-        # TODO: Record links as we add new entities
-        for pr_ref in repo.get_pulls(state='all'):
-            pr = parse_pr_ref(pr_ref, self.repository_obj.name)
+        pr_refs = [ref for ref in repo.get_pulls(state='all')]
+        for pr_ref in pr_refs:
+            pr = __try_and_get__(parse_pr_ref, 10, (pr_ref, self.repository_obj.name))
             if pr_ref.number in pr_numbers:
                 old_pr = [pr for pr in self.repository_obj.prs if pr.number == pr_ref.number][0]
                 self.repository_obj.prs.remove(old_pr)
+            try:
+                all_text = '\n'.join([c.body for c in pr.comments] + [c.title + c.desc for c in pr.commits])
+                issue_numbers = extract_issue_numbers(all_text)
+                issue_numbers = list(filter(lambda id_: ('issue_' + id_[1:]) in issue_ids, issue_numbers))
+                for issue_id in issue_numbers:
+                    self.update_truth((issue_id[1:], pr.number[len('issue_'):]))
+            except TypeError:
+                pass
             self.repository_obj.prs.append(pr)
-        for issue_ref in repo.get_issues(state='all', since=since):
-            issue = parse_issue_ref(issue_ref)
+        issue_refs = [ref for ref in repo.get_issues(state='all', since=since)]
+        for issue_ref in issue_refs:
+            issue = __try_and_get__(parse_issue_ref, 10, tuple(issue_ref))
             if issue.id_ in issue_ids:
                 for comment in issue.replies:
                     update(comment, self.repository_obj.issues)
+                    for id_ in extract_issue_numbers(comment.body):
+                        if ('issue_' + id_[1:]) in pr_numbers:
+                            self.update_truth((issue.id_[len('issue_'):], id_[1:]))
                 for state in issue.states:
                     update(state, self.repository_obj.issues)
                 for commit in issue.commits:
                     update(commit, self.repository_obj.issues)
             else:
                 self.repository_obj.issues.append(issue)
-        return links
 
     def update_from_local_git(self, git_location, since_sha):
         """
@@ -350,9 +374,10 @@ class Linker(object):
         :param link: a link tuple, issue id in first and pr number in second
         """
         try:
-            self.truth[link[0]].append(link[1])
+            if ('#' + link[1]) not in self.truth['#' + link[0]]:
+                self.truth['#' + link[0]].append('#' + link[1])
         except KeyError:
-            self.truth[link[0]] = [link[1]]
+            self.truth['#' + link[0]] = ['#' + link[1]]
 
     def trim_truth(self):
         """

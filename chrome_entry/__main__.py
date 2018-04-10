@@ -77,7 +77,7 @@ def unknown_type(msg):
 def model_update():
     local_server = xmlrpc.client.ServerProxy(SERVER_ADDR)
     local_server.trigger_model_updates()
-    out_msg = '{"Suggestions": [], "Error": "Updated model"}'
+    out_msg = '{"Suggestions": [], "Error": "Updated model, please close and reopen plugin pop-up to use!"}'
     send_message(out_msg)
 
 
@@ -113,14 +113,19 @@ def read_thread_func():
             out_msg = '{"Suggestions": [], "Error": "Malformed JSON message received!"}'
             send_message(out_msg)
             continue
-        if msg['Type'] == 'Prediction':
-            process_prediction_request(msg)
-        elif msg['Type'] == 'Update':
-            model_update()
-        elif msg['Type'] == 'LinkUpdate':
-            record_links(msg)
-        else:
-            unknown_type(msg)
+        try:
+            if msg['Type'] == 'Prediction':
+                process_prediction_request(msg)
+            elif msg['Type'] == 'Update':
+                model_update()
+            elif msg['Type'] == 'LinkUpdate':
+                record_links(msg)
+            else:
+                unknown_type(msg)
+        except Exception as e:
+            out_msg = '{"Suggestions": [], "Error": "Failed due to %s!"}' % json.dumps(e)
+            send_message(out_msg)
+            continue
 
 
 def main():

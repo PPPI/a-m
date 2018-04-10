@@ -41,12 +41,12 @@ if __name__ == '__main__':
             models.append(os.path.basename(location))
             locations[os.path.basename(location)] = location
             git_locations[os.path.basename(location)] = config['git_locations'][config['locations'].index(location)]
-            last_update[os.path.basename(location)] = datetime.now
         max_age_to_keep = config['max_age_to_keep']
 
         for model in models:
             linkers[model] = Linker.load_from_disk(locations[model])
             most_recent_sha[model] = linkers[model].most_recent_sha()
+            last_update[model] = linkers[model].most_recent_timestamp()
 
         server.register_introspection_functions()
 
@@ -83,10 +83,11 @@ if __name__ == '__main__':
 
             def trigger_model_updates(self):
                 for model in models:
-                    # linkers[model].update_from_github(last_update[model])
-                    # last_update[model] = datetime.now
-                    # linkers[model].update_from_local_git(git_locations[model], most_recent_sha[model])
+                    linkers[model].update_from_github(gh, last_update[model])
+                    last_update[model] = datetime.now()
+                    linkers[model].update_from_local_git(git_locations[model], most_recent_sha[model])
                     linkers[model].forget_older_than(max_age_to_keep)
+                    linkers[model].persist_to_disk(locations[model])
 
             def record_link(self, project, issue_id, pr_id):
                 linkers[project].update_truth((issue_id, pr_id))
