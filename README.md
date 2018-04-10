@@ -17,7 +17,7 @@ Linker.persist_to_disk(out_path)
 print('Recorded model to disk')
 ```
 
-The corpora and truth data cand be found at and downloaded from: https://1drv.ms/f/s!AnfFX0y_EVFMmoxKP8NchZzn53RcHw
+The corpora and truth data can be found at and downloaded from: https://1drv.ms/f/s!AnfFX0y_EVFMmoxKP8NchZzn53RcHw
 
 The backend can be used for replication as a standalone or it can be used together with a chrome plug-in.
 For the latter more details at: https://github.com/PPPI/tlinker-chrome
