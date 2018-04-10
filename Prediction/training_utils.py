@@ -284,7 +284,7 @@ def generate_tfidf(repository: Repository, stopwords_: Set[str], min_len) -> Tup
         texts.append(text_pipeline(issue_, stopwords_, min_len))
 
     dictionary_ = Dictionary(texts)
-    dictionary_.filter_extremes(no_below=2, no_above=0.95)
+    dictionary_.filter_extremes(no_below=3, no_above=0.95)
     working_corpus = [dictionary_.doc2bow(text, return_missing=True) for text in texts]
     # Convert UNK from explicit dictionary to UNK token (id = -1)
     working_corpus = [val[0] + [(-1, sum(val[1].values()))] for val in working_corpus]

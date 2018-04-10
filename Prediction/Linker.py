@@ -13,7 +13,7 @@ from github import Github
 
 from Prediction.feature_generation import FeatureGenerator
 from Prediction.gitScraper import get_all_commit_hashes, process_a_commit
-from Prediction.training_utils import generate_training_data_seq as generate_training_data
+from Prediction.training_utils import generate_training_data as generate_training_data
 from Prediction.training_utils import train_classifier, generate_dev_fingerprint, \
     generate_tfidf, update, inflate_events, generate_batches, null_issue, flatten_events, null_pr
 from Util import utils_
@@ -352,7 +352,7 @@ class Linker(object):
         try:
             self.truth[link[0]].append(link[1])
         except KeyError:
-            self.truth[link[0]] = [link[0]]
+            self.truth[link[0]] = [link[1]]
 
     def trim_truth(self):
         """
@@ -524,10 +524,10 @@ if __name__ == '__main__':
 
     location_format = '../data/dev_set/%s.json'
     projects = [
-        'PhilJay_MPAndroidChart',
+        # 'PhilJay_MPAndroidChart',
         'ReactiveX_RxJava',
-        'palantir_plottable',
-        'tensorflow_tensorflow',
+        # 'palantir_plottable',
+        # 'tensorflow_tensorflow',
     ]
     config = {
         'use_issue_only': True,
@@ -552,7 +552,7 @@ if __name__ == '__main__':
     stopwords = utils_.GitMineUtils.STOPWORDS \
                 + list(set(java_reserved + c_reserved + cpp_reserved + javascript_reserved + python_reserved))
     for project in projects:
-        n_batches = 7
+        n_batches = 5
         project_dir = location_format % project
         with open(project_dir) as f:
             repo = jsonpickle.decode(f.read())
@@ -561,17 +561,19 @@ if __name__ == '__main__':
             truth = jsonpickle.decode(f.read())
 
         batches = generate_batches(repo, n_batches)
-        for i in range(n_batches - 2):
-            linker = Linker(net_size_in_days=14, min_tok_len=2, undersample_multiplicity=100, stopwords=stopwords,
-                            feature_config=config, predictions_between_updates=100)
-            training = batches[i] + batches[i + 1]
+        for i in [n_batches - 1]:
+            linker = Linker(net_size_in_days=14, min_tok_len=3, undersample_multiplicity=1000, stopwords=stopwords,
+                            feature_config=config, predictions_between_updates=1000)
+            training = list()
+            for j in range(n_batches - 1):
+                training += batches[j]
             linker.fit(inflate_events(training, repo.langs, repo.name), truth)
             forest = linker.clf
             importances = forest.feature_importances_
             std = np.std([tree.feature_importances_ for tree in forest.estimators_], axis=0)
             pd.DataFrame(data={'Feature': features_string, 'Importance': importances, 'STD': std}) \
                 .to_csv(project_dir[:-5] + ('_results_f%d_NullExplicit_UNKExplicit_FullFeatures_IMP.csv' % i))
-            scores = linker.validate_over_suffix(batches[i + 2])
+            scores = linker.validate_over_suffix(batches[i])
             scores_dict = dict()
             for pr_id, predictions in scores:
                 try:

@@ -28,7 +28,7 @@ def split_compound_toks(toks: List[str]) -> List[str]:
         candidate = utils_.GitMineUtils.camel_to_snake(tok).translate({ord(c): ' ' for c in '_'})
         if not tok == candidate:
             result += [tok_ for tok_ in candidate.split(' ')]
-        result.append(tok)
+        result.append(''.join(tok.split('_')))
     return result
 
 
