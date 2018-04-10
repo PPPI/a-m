@@ -4,6 +4,8 @@ import sys
 import xmlrpc.client
 
 SERVER_ADDR = 'http://localhost:8000'
+
+
 # Helper function that sends a message to the webapp.
 def send_message(message):
     # Write message size.
@@ -14,13 +16,26 @@ def send_message(message):
 
 
 def process_prediction_request(msg):
+    try:
+        with open('previous_ids.txt') as f:
+            lines = [line for line in f.readline()]
+        assert len(lines) == 3
+        previous_repo = lines[0].strip()
+        previous_pr_id = lines[1].strip()
+        previous_issue_id = lines[2].strip()
+    except (FileNotFoundError, AssertionError):
+        previous_repo = ''
+        previous_pr_id = ''
+        previous_issue_id = ''
+
     repo = msg['Repository'].translate({ord(c): '_' for c in '\\/'})
     pr_id = msg['PR']
     issue_id = msg['Issue']
-    threshold = msg['Threshold']
-    out_msg = '{"Suggestions": [], "Error": "Received data, loading model."}'
-    send_message(out_msg)
-
+    if repo == previous_repo and pr_id == previous_pr_id and issue_id == previous_issue_id:
+        with open('previous_suggestion.txt') as f:
+            out_msg = f.read()
+        send_message(out_msg)
+        return
     try:
         out_msg = '{"Suggestions": [], "Error": "Model loaded, running predictions."}'
         send_message(out_msg)
@@ -29,23 +44,24 @@ def process_prediction_request(msg):
             suggestions = local_server.predict_pr(repo, pr_id)
         elif issue_id:
             suggestions = local_server.predict_issue(repo, issue_id)
-        with open('debug_.txt', 'w') as f:
-            f.write('Got suggestions: %s' % str(suggestions))
-        suggestions = [s for s in suggestions if s[-1] >= threshold]
-        with open('debug.txt', 'w') as f:
-            f.write('Got suggestions: %s' % str(suggestions))
+        # with open('debug.txt', 'w') as f:
+        #     f.write('Got suggestions: %s' % str(suggestions))
         if len(suggestions) > 0:
             out_msg = '{"Suggestions": %s, "Error": ""}' \
                       % json.dumps([{'Id': p[0], 'Title': p[1], 'Probability': float('%.2f' % p[2]),
                                      'Repo': msg['Repository']} for p in suggestions])
-            with open('debug.txt', 'w') as f:
-                f.write(out_msg)
+            # with open('debug.txt', 'w') as f:
+            #     f.write(out_msg)
         else:
             out_msg = '{"Suggestions": [], "Error": "No suggestions available"}'
+        with open('previous_suggestion.txt', 'w') as f:
+            f.write(out_msg)
+        with open('previous_ids.txt', 'w') as f:
+            f.write('%s\n%s\n%s' % (repo, pr_id, issue_id))
         send_message(out_msg)
     except Exception as e:
-        with open('debug.txt', 'w') as f:
-            f.write('Failed Predict, %s' % str(e))
+        # with open('debug.txt', 'w') as f:
+        #     f.write('Failed Predict, %s' % str(e))
         if 'RateLimitExceededException' in str(e):
             out_msg = '{"Suggestions": [], "Error": "Github API rate-limit exceeded"}'
         else:
@@ -66,10 +82,16 @@ def model_update():
 
 
 def record_links(msg):
-    # TODO: Implement recording links
+    repo = msg['Repository'].translate({ord(c): '_' for c in '\\/'})
     local_server = xmlrpc.client.ServerProxy(SERVER_ADDR)
-    for link in msg['Links']:
-        local_server.record_link(*link)
+    for issue_id, pr_id in msg['Links']:
+        local_server.record_link(repo, issue_id, pr_id)
+
+
+def dummy():
+    with open('previous_suggestion.txt') as f:
+        out_msg = f.read()
+    send_message(out_msg)
 
 
 # Thread that reads messages from the webapp.
