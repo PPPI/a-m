@@ -10,16 +10,6 @@ if __name__ == '__main__':
 
     from Util.github_api_methods import parse_pr_ref, parse_issue_ref
 
-    def update_and_trim():
-        global last_update, max_age_to_keep, most_recent_sha, locations, linkers
-        for project in models:
-            links = linkers[project].update_from_github(last_update)
-            linkers[project].update_from_local_git(locations[projects], most_recent_sha)
-            for link in links:
-                linkers[project].update_truth(link)
-            linkers[project].forget_older_than(max_age_to_keep)
-            linkers[project].trim_truth()
-
     models = list()
     linkers = dict()
     locations = dict()
