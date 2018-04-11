@@ -1,3 +1,0 @@
-google_guava
-2682
-None
