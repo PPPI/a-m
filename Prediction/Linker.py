@@ -6,7 +6,7 @@ from time import sleep
 
 import jsonpickle
 import numpy as np
-from datetime import timedelta, datetime
+from datetime import timedelta, datetime, timezone
 
 from gensim.corpora import Dictionary
 from gensim.models import TfidfModel
@@ -340,7 +340,7 @@ class Linker(object):
             self.repository_obj.prs.append(pr)
         issue_refs = [ref for ref in repo.get_issues(state='all', since=since)]
         for issue_ref in issue_refs:
-            issue = __try_and_get__(parse_issue_ref, 10, tuple(issue_ref))
+            issue = __try_and_get__(parse_issue_ref, 10, tuple([issue_ref]))
             if issue.id_ in issue_ids:
                 for comment in issue.replies:
                     update(comment, self.repository_obj.issues)
@@ -362,10 +362,13 @@ class Linker(object):
         """
         repo_name = self.repository_obj.name
         hashes = get_all_commit_hashes(git_location)
-        hashes = hashes[hashes.index(since_sha):]
+        try:
+            hashes = hashes[hashes.index(since_sha):]
+        except ValueError:
+            pass
         commits = list(map(lambda h: process_a_commit(h, repo_name, git_location), hashes))
         for commit in commits:
-            if commit not in self.repository_obj.commits:
+            if len([_ for _ in self.repository_obj.commits if _.c_hash.startswith(commit.c_hash)]) > 0:
                 self.repository_obj.commits.append(commit)
 
     def update_truth(self, link):
@@ -386,7 +389,7 @@ class Linker(object):
         issue_ids = [i.id_ for i in self.repository_obj.issues]
         temp = dict()
         for issue_id in self.truth.keys():
-            if issue_id in issue_ids:
+            if ('issue_' + issue_id[1:]) in issue_ids:
                 temp[issue_id] = self.truth[issue_id]
         self.truth = temp
 
@@ -396,7 +399,7 @@ class Linker(object):
         :param max_age_in_days: The age (in days) of the oldest artifacts to keep
         """
         self.fit(inflate_events(
-            list(filter(lambda e: (e[0].timestamp - datetime.now()) <= timedelta(days=max_age_in_days),
+            list(filter(lambda e: (e[0].timestamp - datetime.now(tz=None)) <= timedelta(days=max_age_in_days),
                         flatten_events(self.repository_obj))),
             self.repository_obj.name, self.repository_obj.langs), self.truth)
         self.trim_truth()

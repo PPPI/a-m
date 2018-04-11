@@ -199,7 +199,7 @@ class Feature_Closure(object):
         self.feature_generator = feature_generator
 
     def __call__(self, args):
-        self.feature_generator.generate_features(*args)
+        return self.feature_generator.generate_features(*args)
 
 
 def generate_training_data(training_repo_: Repository,

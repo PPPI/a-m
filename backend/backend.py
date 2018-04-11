@@ -33,7 +33,7 @@ if __name__ == '__main__':
 
 
     # Create server
-    with SimpleXMLRPCServer(("localhost", 8000), requestHandler=RequestHandler) as server:
+    with SimpleXMLRPCServer(("localhost", 8000), requestHandler=RequestHandler, allow_none=True) as server:
         with open(os.path.join(os.curdir, 'config.json')) as f:
             config = json.loads(f.read())
 
