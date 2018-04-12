@@ -325,34 +325,36 @@ class Linker(object):
         issue_ids = [issue.id_ for issue in self.repository_obj.issues]
         pr_refs = [ref for ref in repo.get_pulls(state='all')]
         for pr_ref in pr_refs:
-            pr = __try_and_get__(parse_pr_ref, 10, (pr_ref, self.repository_obj.name))
-            if pr_ref.number in pr_numbers:
-                old_pr = [pr for pr in self.repository_obj.prs if pr.number == pr_ref.number][0]
-                self.repository_obj.prs.remove(old_pr)
-            try:
-                all_text = '\n'.join([c.body for c in pr.comments] + [c.title + c.desc for c in pr.commits])
-                issue_numbers = extract_issue_numbers(all_text)
-                issue_numbers = list(filter(lambda id_: ('issue_' + id_[1:]) in issue_ids, issue_numbers))
-                for issue_id in issue_numbers:
-                    self.update_truth((issue_id[1:], pr.number[len('issue_'):]))
-            except TypeError:
-                pass
-            self.repository_obj.prs.append(pr)
+            pr = __try_and_get__(parse_pr_ref, 20, (pr_ref, self.repository_obj.name))
+            if pr is not None:
+                if pr_ref.number in pr_numbers:
+                    old_pr = [pr for pr in self.repository_obj.prs if pr.number == pr_ref.number][0]
+                    self.repository_obj.prs.remove(old_pr)
+                try:
+                    all_text = '\n'.join([c.body for c in pr.comments] + [c.title + c.desc for c in pr.commits])
+                    issue_numbers = extract_issue_numbers(all_text)
+                    issue_numbers = list(filter(lambda id_: ('issue_' + id_[1:]) in issue_ids, issue_numbers))
+                    for issue_id in issue_numbers:
+                        self.update_truth((issue_id[1:], pr.number[len('issue_'):]))
+                except TypeError:
+                    pass
+                self.repository_obj.prs.append(pr)
         issue_refs = [ref for ref in repo.get_issues(state='all', since=since)]
         for issue_ref in issue_refs:
-            issue = __try_and_get__(parse_issue_ref, 10, tuple([issue_ref]))
-            if issue.id_ in issue_ids:
-                for comment in issue.replies:
-                    update(comment, self.repository_obj.issues)
-                    for id_ in extract_issue_numbers(comment.body):
-                        if ('issue_' + id_[1:]) in pr_numbers:
-                            self.update_truth((issue.id_[len('issue_'):], id_[1:]))
-                for state in issue.states:
-                    update(state, self.repository_obj.issues)
-                for commit in issue.commits:
-                    update(commit, self.repository_obj.issues)
-            else:
-                self.repository_obj.issues.append(issue)
+            issue = __try_and_get__(parse_issue_ref, 20, tuple([issue_ref]))
+            if issue is not None:
+                if issue.id_ in issue_ids:
+                    for comment in issue.replies:
+                        update(comment, self.repository_obj.issues)
+                        for id_ in extract_issue_numbers(comment.body):
+                            if ('issue_' + id_[1:]) in pr_numbers:
+                                self.update_truth((issue.id_[len('issue_'):], id_[1:]))
+                    for state in issue.states:
+                        update(state, self.repository_obj.issues)
+                    for commit in issue.commits:
+                        update(commit, self.repository_obj.issues)
+                else:
+                    self.repository_obj.issues.append(issue)
 
     def update_from_local_git(self, git_location, since_sha):
         """
