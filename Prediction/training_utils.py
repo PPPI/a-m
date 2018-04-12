@@ -40,7 +40,8 @@ def flatten_events(repo_: Repository) \
     result += [(action, i) for i in repo_.issues for action in i.actions if isinstance(action, Reference)]
     result += [(comment, pr) for pr in repo_.prs for comment in pr.comments]
     result += [(commit, pr) for pr in repo_.prs for commit in pr.commits]
-    result = sorted(result, key=lambda e: e[0].timestamp)
+    result = sorted(map(lambda e: [e, setattr(e[0], 'timestamp', e[0].timestamp.replace(tzinfo=None))][0], result),
+                    key=lambda e: e[0].timestamp)
     return result
 
 

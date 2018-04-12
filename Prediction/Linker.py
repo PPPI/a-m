@@ -6,7 +6,7 @@ from time import sleep
 
 import jsonpickle
 import numpy as np
-from datetime import timedelta, datetime, timezone
+from datetime import timedelta, datetime
 
 from gensim.corpora import Dictionary
 from gensim.models import TfidfModel
@@ -365,9 +365,14 @@ class Linker(object):
         repo_name = self.repository_obj.name
         hashes = get_all_commit_hashes(git_location)
         try:
-            hashes = hashes[hashes.index(since_sha):]
+            hashes = hashes[:hashes.index(since_sha):]
         except ValueError:
-            pass
+            current_index = -1
+            sorted_commits = sorted(self.repository_obj.commits, key=lambda c: c.timestamp)
+            while sorted_commits[current_index].c_hash not in hashes:
+                current_index -= 1
+            since_sha = sorted_commits[current_index].c_hash
+            hashes = hashes[:hashes.index(since_sha):]
         commits = list(map(lambda h: process_a_commit(h, repo_name, git_location), hashes))
         for commit in commits:
             if len([_ for _ in self.repository_obj.commits if _.c_hash.startswith(commit.c_hash)]) > 0:
