@@ -1,6 +1,6 @@
 import os
 import tempfile
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Set
 from typing import Tuple
 import subprocess
@@ -68,6 +68,8 @@ def process_a_commit(hash_: str, name: str, path: str) -> Commit:
     author = show_lines[current_index].split(':')[-1][1:].strip().split('<')[0][:-1]
     # We want to remove 'CommitDate: ' from the start, hence 12
     timestamp = datetime.strptime(show_lines[current_index + 3][12:].strip(), '%a %b %d %H:%M:%S %Y %z')
+    timestamp = timestamp.astimezone(tz=timezone.utc)
+    timestamp.replace(tzinfo=None)
 
     current_index += 4
     while not (show_lines[current_index] == '\n'):
