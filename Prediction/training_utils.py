@@ -10,6 +10,9 @@ from typing import List, Tuple, Union, Set, Dict, Any
 from gensim.corpora import Dictionary
 from gensim.models import tfidfmodel
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.feature_selection import SelectFromModel
+from sklearn.pipeline import Pipeline
+from sklearn.svm import LinearSVC
 
 from Prediction.text_utils import text_pipeline
 from gitMine.VCClasses import Repository, Commit, Comment, StateChange, Reference, Issue, PullRequest, IssueStates
@@ -265,14 +268,20 @@ def generate_training_data_seq(training_repo_: Repository,
     return training_data_
 
 
-def train_classifier(training_data_: List[Dict[str, Any]]) -> RandomForestClassifier:
+def train_classifier(training_data_: List[Dict[str, Any]], perform_feature_selection: bool=True) \
+        -> RandomForestClassifier:
     X = list()
     y = list()
     for point in training_data_:
         X.append(tuple([v for k, v in point.items() if k not in ['linked', 'issue', 'pr']]))
         y.append(1 if point['linked'] else -1)
-
-    clf_ = RandomForestClassifier(n_estimators=100, class_weight='balanced_subsample')
+    if perform_feature_selection:
+        clf_ = Pipeline([
+          ('feature_selection', SelectFromModel(LinearSVC(penalty="l1"))),
+          ('classification', RandomForestClassifier(n_estimators=100, class_weight='balanced_subsample'))
+        ])
+    else:
+        clf_ = RandomForestClassifier(n_estimators=100, class_weight='balanced_subsample')
     clf_.fit(X, y)
     return clf_
 
