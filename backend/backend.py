@@ -1,3 +1,5 @@
+from dateutil.tz import tzlocal
+
 if __name__ == '__main__':
     import json
     from datetime import datetime
@@ -50,6 +52,11 @@ if __name__ == '__main__':
             def predict_issue(self, project, issue_id):
                 try:
                     issue_ref = projects[project].get_issue(int(issue_id))
+                    if gh.rate_limiting[0] == 0:
+                        raise RuntimeError('GitHut API rate-limit exceeded, please try again after %s' %
+                                           datetime.fromtimestamp(
+                                               int(gh.rate_limiting_resettime)
+                                           ).astimezone(tz=tzlocal()).strftime('%Y-%m-%d %H:%M:%S'))
                     issue = parse_issue_ref(issue_ref)
                     _, suggestions = linkers[project].update_and_predict((issue, issue))
                     suggestions = [(id_[len('issue_'):], '#%s: %s'
@@ -62,6 +69,11 @@ if __name__ == '__main__':
             def predict_pr(self, project, pr_id):
                 try:
                     pr_ref = projects[project].get_pull(int(pr_id))
+                    if gh.rate_limiting[0] == 0:
+                        raise RuntimeError('GitHut API rate-limit exceeded, please try again after %s' %
+                                           datetime.fromtimestamp(
+                                               int(gh.rate_limiting_resettime)
+                                           ).astimezone(tz=tzlocal()).strftime('%Y-%m-%d %H:%M:%S'))
                     pr = parse_pr_ref(pr_ref, project)
                     _, suggestions = linkers[project].update_and_predict((pr, pr))
                     suggestions = [(id_[len('issue_'):], '#%s: %s'
