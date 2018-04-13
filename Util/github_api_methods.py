@@ -88,7 +88,8 @@ def parse_event(event_ref):
 
 def parse_issue_ref(issue_ref):
     op = Comment(author=issue_ref.user.login, id_='issuecomment_%d' % issue_ref.number,
-                 body=issue_ref.body, timestamp=issue_ref.created_at.replace(tzinfo=None))
+                 body=issue_ref.body if issue_ref.body is not None else '',
+                 timestamp=issue_ref.created_at.replace(tzinfo=None))
     issue = Issue(assignee=issue_ref.assignee.login if issue_ref.assignee else None,
                   id_=issue_ref.number, original_post=op, repository=issue_ref.repository.full_name,
                   title=issue_ref.title if issue_ref.title is not None else '')

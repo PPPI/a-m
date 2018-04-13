@@ -36,7 +36,8 @@ def text_pipeline(tokenizable: Union[Issue, Commit, PullRequest], stopwords_: Se
     if isinstance(tokenizable, Issue):
         text = [tokenizable.title] \
                + ([tokenizable.original_post.body]
-                  if tokenizable.original_post.body != 'No description provided.' else []) \
+                  if (tokenizable.original_post.body != 'No description provided.'
+                      and tokenizable.original_post.body is not None) else []) \
                + [comm.body for comm in tokenizable.replies]
     elif isinstance(tokenizable, Commit):
         text = [merge_commit_title_and_desc(tokenizable)] + ([tokenizable.diff] if isinstance(tokenizable.diff, str)
