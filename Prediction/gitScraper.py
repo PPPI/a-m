@@ -69,7 +69,7 @@ def process_a_commit(hash_: str, name: str, path: str) -> Commit:
     # We want to remove 'CommitDate: ' from the start, hence 12
     timestamp = datetime.strptime(show_lines[current_index + 3][12:].strip(), '%a %b %d %H:%M:%S %Y %z')
     timestamp = timestamp.astimezone(tz=timezone.utc)
-    timestamp.replace(tzinfo=None)
+    timestamp = timestamp.replace(tzinfo=None)
 
     current_index += 4
     while not (show_lines[current_index] == '\n'):

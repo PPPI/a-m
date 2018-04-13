@@ -52,5 +52,5 @@ def text_pipeline(tokenizable: Union[Issue, Commit, PullRequest], stopwords_: Se
                + [tokenizable.comments[0].body] if tokenizable.comments else [] + [tokenizable.title]
     else:
         raise ValueError('Unexpected object type, tokenizable must be either an Issue, Commit or PullRequest')
-    text = '\n'.join(text)
+    text = '\n'.join([t if t is not None else '' for t in text])
     return preprocess_text(text, stopwords_, min_len)

@@ -287,7 +287,8 @@ class Linker(object):
         return title
 
     def most_recent_sha(self):
-        return sorted(self.repository_obj.commits, key=lambda c: c.timestamp)[-1].c_hash
+        return sorted(map(lambda c: [c, setattr(c, 'timestamp', c.timestamp.replace(tzinfo=None))][0],
+                          self.repository_obj.commits), key=lambda c: c.timestamp)[-1].c_hash
 
     def most_recent_timestamp(self):
         return sorted(flatten_events(self.repository_obj), key=lambda e: e[0].timestamp)[-1][0].timestamp
