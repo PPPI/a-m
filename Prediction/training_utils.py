@@ -184,7 +184,7 @@ def generate_pr_issue_interest_pairs(pr_, issue_list, truth_, net_size_in_days):
                            [i.original_post]
                            + [r for r in i.replies if r.author == author]
                            + i.states
-                           + i.actions]) <= timedelta(days=net_size_in_days))] + [null_issue]
+                           + i.actions]) <= timedelta(days=net_size_in_days))]
     link_data = list()
     for issue_ in considered:
         try:
@@ -227,9 +227,13 @@ def generate_training_data(training_repo_: Repository,
         for issue, any_link in issue_map.items():
             if not any_link:
                 arg_list.append((issue, null_pr, True))
+            else:
+                arg_list.append((issue, null_pr, False))
         for pr, any_link in pr_map.items():
             if not any_link:
                 arg_list.append((null_issue, pr, True))
+            else:
+                arg_list.append((null_issue, pr, False))
 
         arg_list = undersample_naively(mult_, arg_list)
 
