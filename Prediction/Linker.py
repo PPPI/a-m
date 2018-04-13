@@ -409,7 +409,7 @@ class Linker(object):
         self.fit(inflate_events(
             list(filter(lambda e: (e[0].timestamp - datetime.now(tz=None)) <= timedelta(days=max_age_in_days),
                         flatten_events(self.repository_obj))),
-            self.repository_obj.name, self.repository_obj.langs), self.truth)
+            name=self.repository_obj.name, langs=self.repository_obj.langs), self.truth)
         self.trim_truth()
 
     def persist_to_disk(self, path):
