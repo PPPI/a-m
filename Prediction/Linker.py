@@ -343,6 +343,7 @@ class Linker(object):
             except TypeError:
                 pass
             self.repository_obj.prs.append(pr)
+
         issue_refs = [ref for ref in repo.get_issues(state='all', since=since)]
         for issue_ref in issue_refs:
             issue = None
@@ -351,17 +352,17 @@ class Linker(object):
                     sleep(gh.rate_limiting_resettime - time())
                 issue = __try_and_get__(parse_issue_ref, 20, tuple([issue_ref]))
             if issue.id_ in issue_ids:
-                for comment in issue.replies:
-                    update(comment, self.repository_obj.issues)
-                    for id_ in extract_issue_numbers(comment.body):
-                        if ('issue_' + id_[1:]) in pr_numbers:
-                            self.update_truth((issue.id_[len('issue_'):], id_[1:]))
-                for state in issue.states:
-                    update(state, self.repository_obj.issues)
-                for commit in issue.commits:
-                    update(commit, self.repository_obj.issues)
-            else:
-                self.repository_obj.issues.append(issue)
+                existing_issue = [i for i in self.repository_obj.issues if i.id_ == issue.id_][0]
+                self.repository_obj.issues.remove(existing_issue)
+            try:
+                all_text = '\n'.join([c.body for c in pr.comments] + [c.title + c.desc for c in pr.commits])
+                issue_numbers = extract_issue_numbers(all_text)
+                issue_numbers = list(filter(lambda id_: ('issue_' + id_[1:]) in pr_numbers, issue_numbers))
+                for pr_id in issue_numbers:
+                    self.update_truth((issue.id_[len('issue_'):], pr_id))
+            except TypeError:
+                pass
+            self.repository_obj.issues.append(issue)
 
     def update_from_local_git(self, git_location, since_sha):
         """
