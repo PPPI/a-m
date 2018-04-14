@@ -2,11 +2,11 @@ import pickle
 import os
 import math
 from multiprocessing.pool import Pool
-from time import sleep
+from time import sleep, time
 
 import jsonpickle
 import numpy as np
-from datetime import timedelta, datetime, timezone
+from datetime import timedelta, datetime
 
 from gensim.corpora import Dictionary
 from gensim.models import TfidfModel
@@ -329,7 +329,7 @@ class Linker(object):
             pr = None
             while pr is None:
                 if gh.rate_limiting[0] == 0:
-                    sleep(gh.rate_limiting_resettime - datetime.now(tz=timezone.utc).timetuple())
+                    sleep(gh.rate_limiting_resettime - time())
                 pr = __try_and_get__(parse_pr_ref, 20, (pr_ref, self.repository_obj.name))
             if pr_ref.number in pr_numbers:
                 old_pr = [pr for pr in self.repository_obj.prs if pr.number == pr_ref.number][0]
@@ -348,7 +348,7 @@ class Linker(object):
             issue = None
             while issue is None:
                 if gh.rate_limiting[0] == 0:
-                    sleep(gh.rate_limiting_resettime - datetime.now(tz=timezone.utc).timetuple())
+                    sleep(gh.rate_limiting_resettime - time())
                 issue = __try_and_get__(parse_issue_ref, 20, tuple([issue_ref]))
             if issue.id_ in issue_ids:
                 for comment in issue.replies:
