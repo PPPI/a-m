@@ -15,8 +15,9 @@ class Comment(object):
         self.timestamp.__cmp__(other.timestamp)
 
     def __repr__(self):
-        return "Comment: [author=\'" + self.author + "\', body=\'" + self.body + "\', timestamp=\'" \
-               + self.timestamp.strftime('%Y-%m-%dT%H:%M:%SZ') + "\']"
+        return "Comment: [author=\'" + (self.author if self.author else '') + \
+               "\', body=\'" + (self.body if self.body else '') + "\', timestamp=\'" \
+               + (self.timestamp.strftime('%Y-%m-%dT%H:%M:%SZ') if self.timestamp else '""') + "\']"
 
 
 class Issue(object):
@@ -50,8 +51,11 @@ class Issue(object):
 
     def __repr__(self):
         return 'Issue = [id = %s, title = %s, op = %s, repo = %s, accessed on %s]' % \
-               (self.id_, self.title, self.original_post,
-                self.repository, self.extracted.strftime('%Y-%m-%d at %H:%M:%S'))
+               (self.id_ if self.id_ else '',
+                self.title if self.title else '',
+                self.original_post if self.original_post else '',
+                self.repository if self.repository else '',
+                self.extracted.strftime('%Y-%m-%d at %H:%M:%S') if self.extracted else '')
 
 
 class Commit(object):
@@ -69,8 +73,12 @@ class Commit(object):
 
     def __repr__(self):
         return 'Commit = [author = %s, title = %s, description = %s, hash = %s, diff = %s, extracted on %s]' \
-               % (self.author, self.title, self.desc, self.c_hash, self.diff,
-                  self.timestamp.strftime('%Y-%m-%d at %H:%M:%S'))
+               % (self.author if self.author else '',
+                  self.title if self.title else '',
+                  self.desc if self.desc else '',
+                  self.c_hash if self.c_hash else '',
+                  self.diff if self.diff else '',
+                  self.timestamp.strftime('%Y-%m-%d at %H:%M:%S') if self.timestamp else '')
 
     def is_within_minutes(self, before_min, after_min, target):
         try:
@@ -124,6 +132,12 @@ class PullRequest(object):
         self.to_repo = to_repo
         self.to_branch = to_branch
         self.assignee = assignee
+
+    def __repr__(self):
+        return 'PullRequest = [id = %s, title = %s, repo = %s]' % \
+               (self.number if self.number else '',
+                self.title if self.title else '',
+                self.to_repo if self.to_repo else '',)
 
 
 class LineMode(Enum):
