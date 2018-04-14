@@ -281,7 +281,7 @@ def train_classifier(training_data_: List[Dict[str, Any]], perform_feature_selec
         y.append(1 if point['linked'] else -1)
     if perform_feature_selection:
         clf_ = Pipeline([
-          ('feature_selection', SelectFromModel(LinearSVC(penalty="l1"))),
+          ('feature_selection', SelectFromModel(LinearSVC(penalty="l2"))),
           ('classification', RandomForestClassifier(n_estimators=100, class_weight='balanced_subsample'))
         ])
     else:

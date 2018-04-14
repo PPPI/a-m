@@ -8,5 +8,5 @@ setup(name='Aide-memoire',
       author_email='profir.p.partachi@gmail.com',
       license='MIT',
       packages=['gitMine', 'Util', 'Prediction', 'backend'],
-      install_requires=['jsonpickle', 'scikit-learn', 'gensim', 'numpy', 'pygithub'],
+      install_requires=['jsonpickle', 'scikit-learn', 'gensim', 'numpy', 'pygithub', 'pytz', 'dateutil'],
       zip_safe=False)
