@@ -1,6 +1,7 @@
 from dateutil.tz import tzlocal
 
-if __name__ == '__main__':
+
+def main():
     import json
     from datetime import datetime
     from xmlrpc.server import SimpleXMLRPCServer
@@ -99,3 +100,7 @@ if __name__ == '__main__':
         print('Loading done, entering serve loop')
         # Run the server's main loop
         server.serve_forever()
+
+
+if __name__ == '__main__':
+    main()
