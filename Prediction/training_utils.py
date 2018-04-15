@@ -272,7 +272,7 @@ def generate_training_data_seq(training_repo_: Repository,
     return training_data_
 
 
-def train_classifier(training_data_: List[Dict[str, Any]], perform_feature_selection: bool=True) \
+def train_classifier(training_data_: List[Dict[str, Any]], perform_feature_selection: bool=False) \
         -> RandomForestClassifier:
     X = list()
     y = list()
