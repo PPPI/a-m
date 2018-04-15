@@ -1,4 +1,5 @@
 import jsonpickle
+import jsonpickle.ext.numpy as jsonpickle_numpy
 
 from Prediction.feature_generation import FeatureGenerator
 from Prediction.training_utils import generate_training_data, generate_tfidf, generate_dev_fingerprint
@@ -6,6 +7,7 @@ from Util import utils_
 from Util.ReservedKeywords import java_reserved, c_reserved, cpp_reserved, javascript_reserved, python_reserved
 
 if __name__ == '__main__':
+    jsonpickle_numpy.register_handlers()
     stopwords = utils_.GitMineUtils.STOPWORDS \
                 + list(set(java_reserved + c_reserved + cpp_reserved + javascript_reserved + python_reserved))
     min_tok_len = 3

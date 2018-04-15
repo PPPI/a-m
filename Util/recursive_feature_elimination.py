@@ -1,8 +1,11 @@
 import jsonpickle
+import jsonpickle.ext.numpy as jsonpickle_numpy
+
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_selection import RFE
 
 if __name__ == '__main__':
+    jsonpickle_numpy.register_handlers()
     feature_names = 'cosine cosine_tt cosine_tc cosine_ct cosine_cc jaccard jaccard_tt jaccard_tc jaccard_ct ' \
                     'jaccard_cc files_shared is_reporter is_assignee engagement in_top_2 in_comments ' \
                     'developer_normalised_lag lag_from_issue_open_to_pr_submission ' \
