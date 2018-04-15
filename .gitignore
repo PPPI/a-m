@@ -5,3 +5,5 @@
 **/__pycache__
 /chrome_entry/debug.txt
 .ipynb_checkpoints/*
+/backend/models
+/backend/models/*
