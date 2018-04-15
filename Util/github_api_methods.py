@@ -37,7 +37,7 @@ def parse_label_ref(label_ref):
 def parse_pr_ref(pr_ref, project):
     author = pr_ref.user.name if pr_ref.user else None
 
-    comments = [Comment(id_='issuecomment_%d' % pr_ref.number, author=author, body=pr_ref.body,
+    comments = [Comment(id_='issuecomment_%d' % pr_ref.number, author=author, body=pr_ref.body if pr_ref.body else '',
                         timestamp=pr_ref.created_at.replace(tzinfo=None))]
     for comment_ref in pr_ref.get_comments():
         comments.append(parse_comment_ref(comment_ref))
