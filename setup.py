@@ -9,10 +9,10 @@ setup(name='Aide-memoire',
       license='MIT',
       packages=['gitMine', 'Util', 'Prediction', 'backend'],
       entry_points={
-        'console_scripts': [
-            'am-backend-run = backend.backend:main',
-            'am-model-generate = backend.generate_model:main'
-        ],
-    },
-      install_requires=['jsonpickle', 'scikit-learn', 'gensim', 'numpy', 'pygithub', 'pytz'],
+          'console_scripts': [
+              'am-backend-run = backend.backend:main',
+              'am-model-generate = backend.generate_model:main'
+          ],
+      },
+      install_requires=['jsonpickle', 'scikit-learn', 'gensim', 'numpy', 'pygithub', 'pytz', 'pandas'],
       zip_safe=False)
