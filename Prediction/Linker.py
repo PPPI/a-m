@@ -76,6 +76,7 @@ def evaluate_at_threshold(result, th, truth):
     return mrr, ap, dcg, hit, fpr, fnr
 
 
+# Closures needed to be able to generate features in a multi-threaded way.
 class Issue_Closure(object):
     def __init__(self, prediction_object, feature_generator):
         self.prediction_object = prediction_object
@@ -94,6 +95,7 @@ class PR_Closure(object):
         return self.feature_generator.generate_features(self.prediction_object, pr, False)
 
 
+# Basic wrapper to re-attempt with exponential back-off
 def __try_and_get__(via, max_attempts, args):
     attempt = 0
     while attempt < max_attempts:
@@ -105,6 +107,17 @@ def __try_and_get__(via, max_attempts, args):
 
 
 class Linker(object):
+    """
+    Main class that encapsulates the concept of a link prediction engine. It is constructed using a configuration as
+    follows:
+    net_size_in_days : The size of the window of interest around a specific artefact's timestamp when shortlisting
+        candidates
+    undersample_multiplicity : What is the desired class imbalance we wish to reach by false links uniformly at random
+    feature_config : A dictionary of str to bool that indicates which features will be used in classification
+    predictions_between_updates : How many new artefacts do we admit to the corpus before recomputing tf-idf values
+    min_tok_len : the length that a token must have to be included in the corpus
+    stopwords : a set of words to be excluded from the corpus
+    """
     def __init__(self, net_size_in_days, undersample_multiplicity, feature_config, predictions_between_updates=None,
                  min_tok_len=None, stopwords=None):
         self.repository_obj = None

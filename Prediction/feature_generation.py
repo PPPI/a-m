@@ -26,11 +26,24 @@ def cosine_similarity(vec1, vec2):
 
 
 def jaccard_similarity(set1, set2):
+    """
+    Return the jaccard similarity between two vectors.
+
+    Args:
+        vec1 (:class:`set`)
+        vec2 (:class:`set`)
+
+    Returns:
+        float
+    """
     return len(set1.intersection(set2)) / len(set1.union(set2)) \
         if len(set1.union(set2)) > 0 else .0
 
 
 class FeatureGenerator(object):
+    """
+    Class that provides easy access to feature generation under a particular configuration
+    """
     def __init__(self, use_sim_cs, use_sim_j, use_social, use_temporal, use_file, use_pr_only, use_issue_only,
                  similarity_config=None, temporal_config=None, text_cache=None):
         self.use_sim_cs = use_sim_cs
