@@ -1,3 +1,4 @@
+import math
 from multiprocessing.pool import Pool
 from random import shuffle
 
@@ -158,9 +159,11 @@ def generate_dev_fingerprint(repo_: Repository):
                                              state.to_ == IssueStates.closed]]).total_seconds())
                         break
         if pr_td:
-            dev_tick_rate[dev] = float(np.mean(pr_td))
+            avg = float(np.mean(pr_td))
+            dev_tick_rate[dev] = avg if not(math.isnan(avg)) else 1.0
             average_joe.append(dev_tick_rate[dev])
-    dev_tick_rate['AVG'] = float(np.mean(average_joe))
+    avg = float(np.mean(average_joe))
+    dev_tick_rate['AVG'] = avg if not(math.isnan(avg)) else 1.0
     return dev_tick_rate
 
 
