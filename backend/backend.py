@@ -18,6 +18,7 @@ def main():
     locations = dict()
     git_locations = dict()
     last_update = dict()
+    threshold_mean = dict()
     most_recent_sha = dict()
 
     # Restrict to a particular path.
@@ -40,6 +41,7 @@ def main():
             linkers[model] = Linker.load_from_disk(locations[model])
             most_recent_sha[model] = linkers[model].most_recent_sha()
             last_update[model] = linkers[model].most_recent_timestamp()
+            threshold_mean[model] = linkers[model].get_mean_probability_of_true_link()
 
         server.register_introspection_functions()
 
@@ -50,39 +52,48 @@ def main():
         # Register an instance; all the methods of the instance are
         # published as XML-RPC methods
         class PredictionFunctions:
+            def request_mean_threshold(self, project):
+                return threshold_mean[project]
+
             def predict_issue(self, project, issue_id):
                 try:
-                    issue_ref = projects[project].get_issue(int(issue_id))
-                    if gh.rate_limiting[0] == 0:
-                        raise RuntimeError('GitHut API rate-limit exceeded, please try again after %s' %
-                                           datetime.fromtimestamp(
-                                               int(gh.rate_limiting_resettime)
-                                           ).astimezone(tz=tzlocal()).strftime('%Y-%m-%d %H:%M:%S'))
-                    issue = parse_issue_ref(issue_ref)
-                    _, suggestions = linkers[project].update_and_predict((issue, issue))
+                    try:
+                        issue = [i for i in linkers[project].repository_obj.issues if i.id_ == issue_id][0]
+                    except IndexError:
+                        issue_ref = projects[project].get_issue(int(issue_id))
+                        if gh.rate_limiting[0] == 0:
+                            raise RuntimeError('GitHut API rate-limit exceeded, please try again after %s' %
+                                               datetime.fromtimestamp(
+                                                   int(gh.rate_limiting_resettime)
+                                               ).astimezone(tz=tzlocal()).strftime('%Y-%m-%d %H:%M:%S'))
+                        issue = parse_issue_ref(issue_ref)
+                    suggestions = linkers[project].request_prediction(issue)
                     suggestions = [(id_[len('issue_'):], '#%s: %s'
                                     % (id_[len('issue_'):], linkers[project].id_to_title(id_)), prop)
                                    for id_, prop in suggestions]
                     return list(suggestions)
                 except KeyError:
-                    return None
+                    raise KeyError('Missing model, did you forget to train one for the backend?')
 
             def predict_pr(self, project, pr_id):
                 try:
-                    pr_ref = projects[project].get_pull(int(pr_id))
-                    if gh.rate_limiting[0] == 0:
-                        raise RuntimeError('GitHut API rate-limit exceeded, please try again after %s' %
-                                           datetime.fromtimestamp(
-                                               int(gh.rate_limiting_resettime)
-                                           ).astimezone(tz=tzlocal()).strftime('%Y-%m-%d %H:%M:%S'))
-                    pr = parse_pr_ref(pr_ref, project)
-                    _, suggestions = linkers[project].update_and_predict((pr, pr))
+                    try:
+                        pr = [p for p in linkers[project].repository_obj.prs if p.number == pr_id][0]
+                    except IndexError:
+                        pr_ref = projects[project].get_pull(int(pr_id))
+                        if gh.rate_limiting[0] == 0:
+                            raise RuntimeError('GitHut API rate-limit exceeded, please try again after %s' %
+                                               datetime.fromtimestamp(
+                                                   int(gh.rate_limiting_resettime)
+                                               ).astimezone(tz=tzlocal()).strftime('%Y-%m-%d %H:%M:%S'))
+                        pr = parse_pr_ref(pr_ref, project)
+                    suggestions = linkers[project].request_prediction(pr)
                     suggestions = [(id_[len('issue_'):], '#%s: %s'
                                     % (id_[len('issue_'):], linkers[project].id_to_title(id_)), prop)
                                    for id_, prop in suggestions]
                     return list(suggestions)
                 except KeyError:
-                    return None
+                    raise KeyError('Missing model, did you forget to train one for the backend?')
 
             def trigger_model_updates(self):
                 for model in models:

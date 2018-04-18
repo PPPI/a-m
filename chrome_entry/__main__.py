@@ -64,12 +64,24 @@ def record_links(msg):
 
 
 def dummy():
+    """
+    Dummy function used as a stub to debug w/o running the backend. Reuses a prerecorded message.
+    :return: None
+    """
     with open('previous_suggestion.txt') as f:
         out_msg = f.read()
     send_message(out_msg)
 
 
 # Thread that reads messages from the webapp.
+def threshold_request(msg):
+    repo = msg['Repository'].translate({ord(c): '_' for c in '\\/'})
+    local_server = xmlrpc.client.ServerProxy(SERVER_ADDR, allow_none=True)
+    threshold = local_server.request_mean_threshold(repo)
+    out_msg = '{"Threshold": %2.2f}' % threshold
+    send_message(out_msg)
+
+
 def read_thread_func():
     while True:
         # Read the message length (first 4 bytes).
@@ -93,6 +105,8 @@ def read_thread_func():
                 model_update()
             elif msg['Type'] == 'LinkUpdate':
                 record_links(msg)
+            elif msg['Type'] == 'Threshold':
+                threshold_request(msg)
             else:
                 unknown_type(msg)
         except Exception as e:

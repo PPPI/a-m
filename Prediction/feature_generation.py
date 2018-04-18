@@ -26,13 +26,26 @@ def cosine_similarity(vec1, vec2):
 
 
 def jaccard_similarity(set1, set2):
+    """
+    Return the jaccard similarity between two vectors.
+
+    Args:
+        vec1 (:class:`set`)
+        vec2 (:class:`set`)
+
+    Returns:
+        float
+    """
     return len(set1.intersection(set2)) / len(set1.union(set2)) \
         if len(set1.union(set2)) > 0 else .0
 
 
 class FeatureGenerator(object):
+    """
+    Class that provides easy access to feature generation under a particular configuration
+    """
     def __init__(self, use_sim_cs, use_sim_j, use_social, use_temporal, use_file, use_pr_only, use_issue_only,
-                 similarity_config=None, temporal_config=None):
+                 similarity_config=None, temporal_config=None, text_cache=None):
         self.use_sim_cs = use_sim_cs
         self.use_sim_j = use_sim_j
         self.use_file = use_file
@@ -50,20 +63,30 @@ class FeatureGenerator(object):
             self.net_size_in_days = temporal_config['net_size_in_days']
         self.use_pr_only = use_pr_only
         self.use_issue_only = use_issue_only
+        self.text_cache = dict() if text_cache is None else text_cache
+
+    def via_text_cache(self, key, obj, full=True):
+        text_preprocessor = text_pipeline if full else preprocess_text
+        if key not in self.text_cache.keys():
+            text = text_preprocessor(obj, self.stopwords, self.min_len)
+            self.text_cache[key] = text
+        else:
+            text = self.text_cache[key]
+        return text
 
     def generate_features(self, issue_: Issue, pr: PullRequest, linked: bool) -> Dict[str, Any]:
         issue_id = issue_.id_
         pr_id = pr.number
         features = {'issue': issue_id, 'pr': pr_id, 'linked': linked}
         if self.use_sim_cs or self.use_sim_j or self.use_file:
-            full_issue_text = text_pipeline(issue_, self.stopwords, self.min_len)
+            full_issue_text = self.via_text_cache(issue_id, issue_)
         if self.use_sim_cs or self.use_sim_j:
-            full_pr_text = text_pipeline(pr, self.stopwords, self.min_len)
-            pr_title_text = preprocess_text(pr.title, self.stopwords, self.min_len)
-            pr_desc_text = preprocess_text(pr.comments[0].body, self.stopwords, self.min_len) \
+            full_pr_text = self.via_text_cache(pr_id, pr)
+            pr_title_text = self.via_text_cache(pr_id + '_t', pr.title, False)
+            pr_desc_text = self.via_text_cache(pr_id + '_d', pr.comments[0].body, False) \
                 if len(pr.comments) > 0 else []
-            issue_title_text = preprocess_text(issue_.title, self.stopwords, self.min_len)
-            issue_report_text = preprocess_text(issue_.original_post.body, self.stopwords, self.min_len)
+            issue_title_text = self.via_text_cache(issue_id + '_t', issue_.title, False)
+            issue_report_text = self.via_text_cache(issue_id + '_r', issue_.original_post.body, False)
 
         if self.use_sim_cs:
             # The vector is 1 longer than the number of ids so we can have UNK at the end (-1)
