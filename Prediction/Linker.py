@@ -139,8 +139,9 @@ class Linker(object):
 
         similarity_config = None
         temporal_config = None
+        cache = None
         if self.use_sim_cs or self.use_sim_j or self.use_file:
-            self.model, self.dictionary = generate_tfidf(self.repository_obj, self.stopwords, self.min_tok_len)
+            self.model, self.dictionary, cache = generate_tfidf(self.repository_obj, self.stopwords, self.min_tok_len)
             similarity_config = {
                 'dict': self.dictionary,
                 'model': self.model,
@@ -163,6 +164,7 @@ class Linker(object):
             use_issue_only=self.use_issue_only,
             similarity_config=similarity_config,
             temporal_config=temporal_config,
+            text_cache=cache,
         )
         self.clf = train_classifier(generate_training_data(self.repository_obj,
                                                            self.feature_generator,
@@ -255,7 +257,9 @@ class Linker(object):
             else:
                 self.predictions_from_last_tf_idf_update = 0
                 temporal_config = None
-                self.model, self.dictionary = generate_tfidf(self.repository_obj, self.stopwords, self.min_tok_len)
+                self.model, self.dictionary, new_cache = generate_tfidf(self.repository_obj, self.stopwords,
+                                                                        self.min_tok_len,
+                                                                        cache=self.feature_generator.text_cache)
                 similarity_config = {
                     'dict': self.dictionary,
                     'model': self.model,
@@ -278,6 +282,7 @@ class Linker(object):
                     use_issue_only=self.use_issue_only,
                     similarity_config=similarity_config,
                     temporal_config=temporal_config,
+                    text_cache=new_cache
                 )
             return prediction_object.id_, predictions
 
@@ -293,7 +298,7 @@ class Linker(object):
     def most_recent_timestamp(self):
         return sorted(flatten_events(self.repository_obj), key=lambda e: e[0].timestamp)[-1][0].timestamp
 
-    def update_and_predict(self, event):
+    def update_from_flat_repo_and_predict(self, event):
         if isinstance(event[1], Commit):
             if event[0] not in self.repository_obj.commits:
                 self.repository_obj.commits.append(event[0])
@@ -306,10 +311,23 @@ class Linker(object):
             update(event, self.repository_obj.prs)
             return prediction
 
+    def request_prediction(self, issue_or_pr):
+        # if isinstance(issue_or_pr, Issue):
+        #     old_issue = [i for i in self.repository_obj.issues if i.id_ == issue_or_pr.id_]
+        #     if len(old_issue) == 1:
+        #         self.repository_obj.issues.remove(old_issue)
+        #     self.repository_obj.issues.append(issue_or_pr)
+        # elif isinstance(issue_or_pr, PullRequest):
+        #     old_pr = [p for p in self.repository_obj.prs if p.number == issue_or_pr.number]
+        #     if len(old_pr) == 1:
+        #         self.repository_obj.prs.remove(old_pr)
+        #     self.repository_obj.prs.append(issue_or_pr)
+        return self.predict(issue_or_pr)[1]
+
     def validate_over_suffix(self, suffix):
         scores = list()
         for event in suffix:
-            result = self.update_and_predict(event)
+            result = self.update_from_flat_repo_and_predict(event)
             if result:
                 scores.append(result)
         return scores
@@ -418,6 +436,24 @@ class Linker(object):
                         flatten_events(self.repository_obj))),
             name=self.repository_obj.name, langs=self.repository_obj.langs), self.truth)
         self.trim_truth()
+
+    def get_mean_probability_of_true_link(self):
+        prediction_data = list()
+        predictions = list()
+
+        for issue_id, pr_ids in self.truth.items():
+            issue = [i for i in self.repository_obj.issues if i.id_ == 'issue_' + issue_id[1:]][0]
+            for pr_id in pr_ids:
+                pr = [p for p in self.repository_obj.prs if p.number == 'issue_' + pr_id[1:]][0]
+                prediction_data.append(self.feature_generator.generate_features(issue, pr, True))
+
+        for point in prediction_data:
+            probabilities = self.clf.predict_proba(np.array(tuple([v for k, v in point.items()
+                                                                   if k not in ['linked', 'issue', 'pr']]))
+                                                   .reshape(1, -1))
+            predictions.append(probabilities[0][1])
+
+        return float(np.mean(predictions))
 
     def persist_to_disk(self, path):
         """

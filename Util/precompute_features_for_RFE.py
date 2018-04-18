@@ -25,7 +25,7 @@ if __name__ == '__main__':
             repo = jsonpickle.decode(f.read())
         with open(repo_loc[:-5] + '_truth.json') as f:
             truth = jsonpickle.decode(f.read())
-        model, dictionary = generate_tfidf(repo, stopwords, min_tok_len)
+        model, dictionary, cache = generate_tfidf(repo, stopwords, min_tok_len)
         similarity_config = {
             'dict': dictionary,
             'model': model,
@@ -48,6 +48,7 @@ if __name__ == '__main__':
             use_issue_only=True,
             similarity_config=similarity_config,
             temporal_config=temporal_config,
+            text_cache=cache,
         )
         data = generate_training_data(feature_generator=feature_generator, mult_=multiplicity,
                                       net_size_in_days=net_size_in_days, training_repo_=repo, truth_=truth)

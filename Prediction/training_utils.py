@@ -290,16 +290,29 @@ def train_classifier(training_data_: List[Dict[str, Any]], perform_feature_selec
     return clf_
 
 
-def generate_tfidf(repository: Repository, stopwords_: Set[str], min_len) -> Tuple[tfidfmodel.TfidfModel, Dictionary]:
+def generate_tfidf(repository: Repository, stopwords_: Set[str], min_len, cache=None) -> Tuple[tfidfmodel.TfidfModel, Dictionary, Dict]:
+    if cache is None:
+        cache = dict()
+
     texts = list()
     for pr in repository.prs:
-        texts.append(text_pipeline(pr, stopwords_, min_len))
+        if pr.number in cache.keys():
+            texts.append(cache[pr.number])
+        else:
+            text = text_pipeline(pr, stopwords_, min_len)
+            texts.append(text)
+            cache[pr.number] = text
     for issue_ in repository.issues:
-        texts.append(text_pipeline(issue_, stopwords_, min_len))
+        if issue_.id_ in cache.keys():
+            texts.append(cache[issue_.id_])
+        else:
+            text = text_pipeline(issue_, stopwords_, min_len)
+            texts.append(text)
+            cache[issue_.id_] = text
 
     dictionary_ = Dictionary(texts)
     dictionary_.filter_extremes(no_below=3, no_above=0.95)
     working_corpus = [dictionary_.doc2bow(text, return_missing=True) for text in texts]
     # Convert UNK from explicit dictionary to UNK token (id = -1)
     working_corpus = [val[0] + [(-1, sum(val[1].values()))] for val in working_corpus]
-    return tfidfmodel.TfidfModel(working_corpus, id2word=dictionary_), dictionary_
+    return tfidfmodel.TfidfModel(working_corpus, id2word=dictionary_), dictionary_, cache
