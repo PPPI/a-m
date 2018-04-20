@@ -7,7 +7,8 @@ from sklearn.feature_selection import RFE
 if __name__ == '__main__':
     jsonpickle_numpy.register_handlers()
     feature_names = 'cosine cosine_tt cosine_tc cosine_ct cosine_cc jaccard jaccard_tt jaccard_tc jaccard_ct ' \
-                    'jaccard_cc files_shared is_reporter is_assignee engagement in_top_2 in_comments ' \
+                    'jaccard_cc dice dice_tt dice_tc dice_ct dice_cc files_shared is_reporter ' \
+                    'is_assignee engagement in_top_2 in_comments ' \
                     'developer_normalised_lag lag_from_issue_open_to_pr_submission ' \
                     'lag_from_last_issue_update_to_pr_submission no_pr_desc branch_size files_touched_by_pr ' \
                     'report_size participants bounces existing_links'.split(' ')
@@ -17,7 +18,7 @@ if __name__ == '__main__':
         'PhilJay_MPAndroidChart',
         'ReactiveX_RxJava',
         'palantir_plottable',
-        'tensorflow_tensorflow',
+        # 'tensorflow_tensorflow',
     ]]
 
     for data_loc in data_locations:
