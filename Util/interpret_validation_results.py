@@ -70,8 +70,8 @@ if __name__ == '__main__':
     location_format = '../data/dev_set/%s.json'
     n_fold = 1
     projects = [
-        # 'PhilJay_MPAndroidChart',
-        'ReactiveX_RxJava',
+        'PhilJay_MPAndroidChart',
+        # 'ReactiveX_RxJava',
         # 'google_guava',
         # 'facebook_react',
         # 'palantir_plottable',
@@ -80,7 +80,7 @@ if __name__ == '__main__':
     for project in projects:
         results = list()
         for fold in range(n_fold):
-            with open((location_format[:-5] + '_RAW_results_f%d_ioTrue_poTrue_tTrue_csTrue_jTrue_fTrue_sTrue.txt') % (project, fold)) as f:
+            with open((location_format[:-5] + '_results_f%d_NullExplicit_UNKExplicit_FullFeatures.txt') % (project, fold)) as f:
                 result_str = f.read()
             result = ast.literal_eval(result_str)
             results.append((fold, result))

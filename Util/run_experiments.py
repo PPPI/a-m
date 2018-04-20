@@ -33,6 +33,7 @@ if __name__ == '__main__':
         features_string = \
             ('cosine cosine_tt cosine_tc cosine_ct cosine_cc ' if config['use_sim_cs'] else '') + \
             ('jaccard jaccard_tt jaccard_tc jaccard_ct jaccard_cc ' if config['use_sim_j'] else '') + \
+            ('dice dice_tt dice_tc dice_ct dice_cc ' if config['use_sim_d'] else '') + \
             ('files_shared ' if config['use_file'] else '') + \
             ('is_reporter is_assignee engagement in_top_2 in_comments ' if config['use_social'] else '') + \
             (

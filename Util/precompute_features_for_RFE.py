@@ -42,6 +42,7 @@ if __name__ == '__main__':
             use_file=True,
             use_sim_cs=True,
             use_sim_j=True,
+            use_sim_d=True,
             use_social=True,
             use_temporal=True,
             use_pr_only=True,

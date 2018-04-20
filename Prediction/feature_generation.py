@@ -30,8 +30,8 @@ def jaccard_similarity(set1, set2):
     Return the jaccard similarity between two vectors.
 
     Args:
-        vec1 (:class:`set`)
-        vec2 (:class:`set`)
+        set1 (:class:`set`)
+        set2 (:class:`set`)
 
     Returns:
         float
@@ -40,16 +40,32 @@ def jaccard_similarity(set1, set2):
         if len(set1.union(set2)) > 0 else .0
 
 
+def dice_similarity(set1, set2):
+    """
+    Return the jaccard similarity between two vectors.
+
+    Args:
+        set1 (:class:`set`)
+        set2 (:class:`set`)
+
+    Returns:
+        float
+    """
+    return len(set1.intersection(set2)) / min(len(set1), len(set2)) \
+        if min(len(set1), len(set2)) > 0 else .0
+
+
 class FeatureGenerator(object):
     """
     Class that provides easy access to feature generation under a particular configuration
     """
     def __init__(self, use_sim_cs, use_sim_j, use_social, use_temporal, use_file, use_pr_only, use_issue_only,
-                 similarity_config=None, temporal_config=None, text_cache=None):
+                 use_sim_d, similarity_config=None, temporal_config=None, text_cache=None):
         self.use_sim_cs = use_sim_cs
         self.use_sim_j = use_sim_j
+        self.use_sim_d = use_sim_d
         self.use_file = use_file
-        if self.use_sim_j or self.use_sim_cs or self.use_file:
+        if self.use_sim_d or self.use_sim_j or self.use_sim_cs or self.use_file:
             assert similarity_config
             self.dictionary = similarity_config['dict']
             self.model = similarity_config['model']
@@ -78,9 +94,9 @@ class FeatureGenerator(object):
         issue_id = issue_.id_
         pr_id = pr.number
         features = {'issue': issue_id, 'pr': pr_id, 'linked': linked}
-        if self.use_sim_cs or self.use_sim_j or self.use_file:
+        if self.use_sim_cs or self.use_sim_j or self.use_sim_d or self.use_file:
             full_issue_text = self.via_text_cache(issue_id, issue_)
-        if self.use_sim_cs or self.use_sim_j:
+        if self.use_sim_cs or self.use_sim_j or self.use_sim_d:
             full_pr_text = self.via_text_cache(pr_id, pr)
             pr_title_text = self.via_text_cache(pr_id + '_t', pr.title, False)
             pr_desc_text = self.via_text_cache(pr_id + '_d', pr.comments[0].body, False) \
@@ -125,18 +141,18 @@ class FeatureGenerator(object):
             features['cosine_ct'] = cosine_ct
             features['cosine_cc'] = cosine_cc
 
-        if self.use_file or self.use_sim_j:
+        if self.use_file or self.use_sim_j or self.use_sim_d:
             words_in_issue = set(full_issue_text)
 
-        if self.use_sim_j:
+        if self.use_sim_j or self.use_sim_d:
             words_in_pr = set(full_pr_text)
-            jaccard = jaccard_similarity(words_in_pr, words_in_issue)
-
             words_in_pr_title = set(pr_title_text)
             words_in_pr_desc = set(pr_desc_text)
             words_in_issue_title = set(issue_title_text)
             words_in_issue_report = set(issue_report_text)
 
+        if self.use_sim_j:
+            jaccard = jaccard_similarity(words_in_pr, words_in_issue)
             jaccard_tt = jaccard_similarity(words_in_pr_title, words_in_issue_title)
             jaccard_tc = jaccard_similarity(words_in_pr_title, words_in_issue_report)
             jaccard_ct = jaccard_similarity(words_in_pr_desc, words_in_issue_title)
@@ -146,6 +162,18 @@ class FeatureGenerator(object):
             features['jaccard_tc'] = jaccard_tc
             features['jaccard_ct'] = jaccard_ct
             features['jaccard_cc'] = jaccard_cc
+
+        if self.use_sim_d:
+            dice = dice_similarity(words_in_pr, words_in_issue)
+            dice_tt = dice_similarity(words_in_pr_title, words_in_issue_title)
+            dice_tc = dice_similarity(words_in_pr_title, words_in_issue_report)
+            dice_ct = dice_similarity(words_in_pr_desc, words_in_issue_title)
+            dice_cc = dice_similarity(words_in_pr_desc, words_in_issue_report)
+            features['dice'] = dice
+            features['dice_tt'] = dice_tt
+            features['dice_tc'] = dice_tc
+            features['dice_ct'] = dice_ct
+            features['dice_cc'] = dice_cc
 
         if self.use_file:
             files_in_pr = {ps.stem(str(os.path.basename(diff[0]).split('.')[0])) for diff in pr.diffs}

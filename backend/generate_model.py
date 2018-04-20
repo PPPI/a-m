@@ -24,13 +24,14 @@ def main(args):
         'use_issue_only': False,
         'use_pr_only': True,
         'use_temporal': True,
-        'use_sim_cs': True,
+        'use_sim_cs': False,
         'use_sim_j': False,
+        'use_sim_d': True,
         'use_file': False,
         'use_social': True
     }
     print('Loaded repository %s' % repo.name)
-    linker = Linker(net_size_in_days=7, min_tok_len=2, undersample_multiplicity=1000, feature_config=config,
+    linker = Linker(net_size_in_days=30, min_tok_len=3, undersample_multiplicity=1, feature_config=config,
                     predictions_between_updates=1000, stopwords=stopwords)
     linker.fit(repo, truth)
     print('Trained Random Forest classifier')

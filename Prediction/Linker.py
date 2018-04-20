@@ -136,12 +136,13 @@ class Linker(object):
         self.undersample_multiplicity = undersample_multiplicity
         self.use_sim_cs = feature_config['use_sim_cs']
         self.use_sim_j = feature_config['use_sim_j']
+        self.use_sim_d = feature_config['use_sim_d']
         self.use_social = feature_config['use_social']
         self.use_temporal = feature_config['use_temporal']
         self.use_file = feature_config['use_file']
         self.use_pr_only = feature_config['use_pr_only']
         self.use_issue_only = feature_config['use_issue_only']
-        if self.use_sim_cs or self.use_sim_j or self.use_file:
+        if self.use_sim_cs or self.use_sim_j or self.use_sim_d or self.use_file:
             assert self.predictions_between_updates is not None
             assert self.min_tok_len is not None
             assert self.stopwords is not None
@@ -153,7 +154,7 @@ class Linker(object):
         similarity_config = None
         temporal_config = None
         cache = None
-        if self.use_sim_cs or self.use_sim_j or self.use_file:
+        if self.use_sim_cs or self.use_sim_j or self.use_sim_d or self.use_file:
             self.model, self.dictionary, cache = generate_tfidf(self.repository_obj, self.stopwords, self.min_tok_len)
             similarity_config = {
                 'dict': self.dictionary,
@@ -171,6 +172,7 @@ class Linker(object):
             use_file=self.use_file,
             use_sim_cs=self.use_sim_cs,
             use_sim_j=self.use_sim_j,
+            use_sim_d=self.use_sim_d,
             use_social=self.use_social,
             use_temporal=self.use_temporal,
             use_pr_only=self.use_pr_only,
@@ -264,7 +266,7 @@ class Linker(object):
             predictions = sorted([p for p in predictions if p[1] >= threshold],
                                  key=lambda p: (p[1], p[0]),
                                  reverse=True)
-        if self.use_sim_cs or self.use_sim_j or self.use_file:
+        if self.use_sim_cs or self.use_sim_j or self.use_sim_d or self.use_file:
             if self.predictions_from_last_tf_idf_update < self.predictions_between_updates:
                 self.predictions_from_last_tf_idf_update += 1
             else:
@@ -289,6 +291,7 @@ class Linker(object):
                     use_file=self.use_file,
                     use_sim_cs=self.use_sim_cs,
                     use_sim_j=self.use_sim_j,
+                    use_sim_d=self.use_sim_d,
                     use_social=self.use_social,
                     use_temporal=self.use_temporal,
                     use_pr_only=self.use_pr_only,
@@ -484,6 +487,7 @@ class Linker(object):
             'prediction_threshold': self.prediction_threshold,
             'use_sim_cs': self.use_sim_cs,
             'use_sim_j': self.use_sim_j,
+            'use_sim_d': self.use_sim_d,
             'use_social': self.use_social,
             'use_temporal': self.use_temporal,
             'use_file': self.use_file,
@@ -530,6 +534,7 @@ class Linker(object):
         self.prediction_threshold = params['prediction_threshold']
         self.use_sim_cs = params['use_sim_cs']
         self.use_sim_j = params['use_sim_j']
+        self.use_sim_d = params['use_sim_d']
         self.use_social = params['use_social']
         self.use_temporal = params['use_temporal']
         self.use_file = params['use_file']
@@ -562,7 +567,7 @@ class Linker(object):
             pass
         similarity_config = None
         temporal_config = None
-        if self.use_sim_cs or self.use_sim_j or self.use_file:
+        if self.use_sim_cs or self.use_sim_j or self.use_sim_d or self.use_file:
             assert self.dictionary
             assert self.model
             similarity_config = {
@@ -581,6 +586,7 @@ class Linker(object):
             use_file=self.use_file,
             use_sim_cs=self.use_sim_cs,
             use_sim_j=self.use_sim_j,
+            use_sim_d=self.use_sim_d,
             use_social=self.use_social,
             use_temporal=self.use_temporal,
             use_pr_only=self.use_pr_only,
@@ -604,6 +610,7 @@ class Linker(object):
             'use_temporal': True,
             'use_sim_cs': True,
             'use_sim_j': True,
+            'use_sim_d': True,
             'use_file': True,
             'use_social': True
         }, predictions_between_updates=-1, min_tok_len=-1, stopwords=set())
@@ -616,23 +623,25 @@ if __name__ == '__main__':
 
     location_format = '../data/dev_set/%s.json'
     projects = [
-        # 'PhilJay_MPAndroidChart',
-        'ReactiveX_RxJava',
-        # 'palantir_plottable',
+        'PhilJay_MPAndroidChart',
+        # 'ReactiveX_RxJava',
+        'palantir_plottable',
         # 'tensorflow_tensorflow',
     ]
     config = {
-        'use_issue_only': True,
+        'use_issue_only': False,
         'use_pr_only': True,
         'use_temporal': True,
-        'use_sim_cs': True,
+        'use_sim_cs': False,
         'use_sim_j': True,
+        'use_sim_d': True,
         'use_file': True,
         'use_social': True
     }
     features_string = \
         ('cosine cosine_tt cosine_tc cosine_ct cosine_cc ' if config['use_sim_cs'] else '') + \
         ('jaccard jaccard_tt jaccard_tc jaccard_ct jaccard_cc ' if config['use_sim_j'] else '') + \
+        ('dice dice_tt dice_tc dice_ct dice_cc ' if config['use_sim_d'] else '') + \
         ('files_shared ' if config['use_file'] else '') + \
         ('is_reporter is_assignee engagement in_top_2 in_comments ' if config['use_social'] else '') + \
         ('developer_normalised_lag lag_from_issue_open_to_pr_submission lag_from_last_issue_update_to_pr_submission '
@@ -654,7 +663,7 @@ if __name__ == '__main__':
 
         batches = generate_batches(repo, n_batches)
         for i in [n_batches - 1]:
-            linker = Linker(net_size_in_days=14, min_tok_len=3, undersample_multiplicity=1000, stopwords=stopwords,
+            linker = Linker(net_size_in_days=14, min_tok_len=3, undersample_multiplicity=1, stopwords=stopwords,
                             feature_config=config, predictions_between_updates=1000)
             training = list()
             for j in range(n_batches - 1):
