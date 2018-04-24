@@ -558,7 +558,7 @@ class Linker(object):
             self.dictionary = Dictionary.load_from_text(os.path.join(path, 'tfidf', 'term2id.txt'))
             self.model = TfidfModel.load(os.path.join(path, 'tfidf', 'model.tfidf'))
             with open(os.path.join(path, name, 'stopwords_data.json')) as f:
-                self.fingerprint = jsonpickle.decode(f.read())
+                self.stopwords = jsonpickle.decode(f.read())
         except FileNotFoundError:
             pass
         try:
