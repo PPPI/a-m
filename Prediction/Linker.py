@@ -539,6 +539,9 @@ class Linker(object):
         if self.clf:
             os.makedirs(os.path.dirname(os.path.join(path, 'clf_model', 'model.p')), exist_ok=True)
             pickle.dump(self.clf, open(os.path.join(path, 'clf_model', 'model.p'), 'wb'))
+        if self.feature_generator:
+            os.makedirs(os.path.dirname(os.path.join(path, 'feature_generator', 'gen.p')), exist_ok=True)
+            pickle.dump(self.clf, open(os.path.join(path, 'feature_generator', 'gen.p'), 'wb'))
 
     def __load_from_disk(self, path):
         """
@@ -586,35 +589,10 @@ class Linker(object):
             self.clf = pickle.load(open(os.path.join(path, 'clf_model', 'model.p'), 'rb'))
         except FileNotFoundError:
             pass
-        similarity_config = None
-        temporal_config = None
-        if self.use_sim_cs or self.use_sim_j or self.use_sim_d or self.use_file:
-            assert self.dictionary
-            assert self.model
-            similarity_config = {
-                'dict': self.dictionary,
-                'model': self.model,
-                'min_len': self.min_tok_len,
-                'stopwords': self.stopwords,
-            }
-        if self.use_temporal:
-            self.fingerprint = generate_dev_fingerprint(self.repository_obj)
-            temporal_config = {
-                'fingerprint': self.fingerprint,
-                'net_size_in_days': self.net_size_in_days,
-            }
-        self.feature_generator = FeatureGenerator(
-            use_file=self.use_file,
-            use_sim_cs=self.use_sim_cs,
-            use_sim_j=self.use_sim_j,
-            use_sim_d=self.use_sim_d,
-            use_social=self.use_social,
-            use_temporal=self.use_temporal,
-            use_pr_only=self.use_pr_only,
-            use_issue_only=self.use_issue_only,
-            similarity_config=similarity_config,
-            temporal_config=temporal_config,
-        )
+        try:
+            self.feature_generator = pickle.load(open(os.path.join(path, 'feature_generator', 'gen.p'), 'rb'))
+        except FileNotFoundError:
+            pass
 
     @staticmethod
     def load_from_disk(path):
