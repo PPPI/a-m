@@ -191,7 +191,6 @@ class Linker(object):
         threshold = self.prediction_threshold
         predictions = list()
         if isinstance(prediction_object, PullRequest):
-            predictions = list()
             # Predict
             prediction_object.comments = prediction_object.comments[:1]
             open_issues = [i for i in self.repository_obj.issues
@@ -229,9 +228,8 @@ class Linker(object):
             predictions = sorted([p for p in predictions if p[1] >= threshold],
                                  key=lambda p: (p[1], p[0]),
                                  reverse=True)
-            return prediction_object.number, predictions
+            response = prediction_object.number, predictions
         elif isinstance(prediction_object, Issue):
-            predictions = list()
             # Predict
             candidates = [p for p in self.repository_obj.prs
                           if
@@ -266,6 +264,7 @@ class Linker(object):
             predictions = sorted([p for p in predictions if p[1] >= threshold],
                                  key=lambda p: (p[1], p[0]),
                                  reverse=True)
+            response = prediction_object.id_, predictions
         if self.use_sim_cs or self.use_sim_j or self.use_sim_d or self.use_file:
             if self.predictions_from_last_tf_idf_update < self.predictions_between_updates:
                 self.predictions_from_last_tf_idf_update += 1
@@ -300,7 +299,7 @@ class Linker(object):
                     temporal_config=temporal_config,
                     text_cache=new_cache
                 )
-            return prediction_object.id_, predictions
+        return response
 
     def id_to_title(self, id_):
         title = [e.title for e in self.repository_obj.issues + self.repository_obj.prs
@@ -346,6 +345,23 @@ class Linker(object):
             result = self.update_from_flat_repo_and_predict(event)
             if result:
                 scores.append(result)
+                id_, predictions = result
+                predictions = [t[0][len('issue_'):] for t in predictions[:5]]
+                id_ = id_[len('issue_'):]
+                if isinstance(event[1], Issue):
+                    for other in predictions:
+                        try:
+                            if ('#' + other) in truth['#' + id_]:
+                                self.update_truth((id_, other))
+                        except KeyError:
+                            pass
+                elif isinstance(event[1], PullRequest):
+                    for other in predictions:
+                        try:
+                            if ('#' + id_) in truth['#' + other]:
+                                self.update_truth((other, id_))
+                        except KeyError:
+                            pass
         return scores
 
     def update_from_github(self, gh, since):
@@ -430,6 +446,11 @@ class Linker(object):
                 self.truth['#' + link[0]].append('#' + link[1])
         except KeyError:
             self.truth['#' + link[0]] = ['#' + link[1]]
+        point = self.feature_generator.generate_features(
+                [i for i in self.repository_obj.issues if i.id_[len('issue_'):] == link[0]][0],
+                [p for p in self.repository_obj.prs if p.number[len('issue_'):] == link[1]][0],
+                linked=True)
+        self.clf = self.clf.partial_fit([tuple([v for k, v in point.items() if k not in ['linked', 'issue', 'pr']])], [1])
 
     def trim_truth(self):
         """
@@ -619,7 +640,7 @@ class Linker(object):
 
 
 if __name__ == '__main__':
-    import pandas as pd
+    # import pandas as pd
 
     location_format = '../data/dev_set/%s.json'
     projects = [
@@ -638,18 +659,18 @@ if __name__ == '__main__':
         'use_file': True,
         'use_social': True
     }
-    features_string = \
-        ('cosine cosine_tt cosine_tc cosine_ct cosine_cc ' if config['use_sim_cs'] else '') + \
-        ('jaccard jaccard_tt jaccard_tc jaccard_ct jaccard_cc ' if config['use_sim_j'] else '') + \
-        ('dice dice_tt dice_tc dice_ct dice_cc ' if config['use_sim_d'] else '') + \
-        ('files_shared ' if config['use_file'] else '') + \
-        ('is_reporter is_assignee engagement in_top_2 in_comments ' if config['use_social'] else '') + \
-        ('developer_normalised_lag lag_from_issue_open_to_pr_submission lag_from_last_issue_update_to_pr_submission '
-         if config['use_temporal'] else '') + \
-        ('no_pr_desc branch_size files_touched_by_pr ' if config['use_pr_only'] else '') + \
-        ('report_size participants bounces existing_links ' if config['use_issue_only'] else '')
-    features_string = features_string.strip().split(' ')
-    index_feature_map = {i: features_string[i] for i in range(len(features_string))}
+    # features_string = \
+    #     ('cosine cosine_tt cosine_tc cosine_ct cosine_cc ' if config['use_sim_cs'] else '') + \
+    #     ('jaccard jaccard_tt jaccard_tc jaccard_ct jaccard_cc ' if config['use_sim_j'] else '') + \
+    #     ('dice dice_tt dice_tc dice_ct dice_cc ' if config['use_sim_d'] else '') + \
+    #     ('files_shared ' if config['use_file'] else '') + \
+    #     ('is_reporter is_assignee engagement in_top_2 in_comments ' if config['use_social'] else '') + \
+    #     ('developer_normalised_lag lag_from_issue_open_to_pr_submission lag_from_last_issue_update_to_pr_submission '
+    #      if config['use_temporal'] else '') + \
+    #     ('no_pr_desc branch_size files_touched_by_pr ' if config['use_pr_only'] else '') + \
+    #     ('report_size participants bounces existing_links ' if config['use_issue_only'] else '')
+    # features_string = features_string.strip().split(' ')
+    # index_feature_map = {i: features_string[i] for i in range(len(features_string))}
     stopwords = utils_.GitMineUtils.STOPWORDS \
                 + list(set(java_reserved + c_reserved + cpp_reserved + javascript_reserved + python_reserved))
     for project in projects:
@@ -669,11 +690,11 @@ if __name__ == '__main__':
             for j in range(n_batches - 1):
                 training += batches[j]
             linker.fit(inflate_events(training, repo.langs, repo.name), truth)
-            forest = linker.clf
-            importances = forest.feature_importances_
-            std = np.std([tree.feature_importances_ for tree in forest.estimators_], axis=0)
-            pd.DataFrame(data={'Feature': features_string, 'Importance': importances, 'STD': std}) \
-                .to_csv(project_dir[:-5] + ('_results_f%d_NullExplicit_UNKExplicit_FullFeatures_IMP.csv' % i))
+            # forest = linker.clf
+            # importances = forest.feature_importances_
+            # std = np.std([tree.feature_importances_ for tree in forest.estimators_], axis=0)
+            # pd.DataFrame(data={'Feature': features_string, 'Importance': importances, 'STD': std}) \
+            #     .to_csv(project_dir[:-5] + ('_results_f%d_NullExplicit_UNKExplicit_FullFeatures_IMP.csv' % i))
             scores = linker.validate_over_suffix(batches[i])
             scores_dict = dict()
             for pr_id, predictions in scores:

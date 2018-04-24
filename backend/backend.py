@@ -1,8 +1,6 @@
-from dateutil.tz import tzlocal
-
-
 def main():
     import json
+    from dateutil.tz import tzlocal
     from datetime import datetime
     from xmlrpc.server import SimpleXMLRPCServer
     from xmlrpc.server import SimpleXMLRPCRequestHandler

@@ -115,4 +115,4 @@ if __name__ == '__main__':
                     data['False Positive Rate'].append(fpr)
                     data['False Negative Rate'].append(fnr)
 
-        pd.DataFrame(data=data).to_csv((location_format[:-len('.json')] + '_results_interpreted_Null_Unk.csv') % project)
+        pd.DataFrame(data=data).to_csv((location_format[:-len('.json')] + '_results_interpreted_MF.csv') % project)

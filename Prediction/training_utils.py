@@ -11,9 +11,9 @@ from typing import List, Tuple, Union, Set, Dict, Any
 from gensim.corpora import Dictionary
 from gensim.models import tfidfmodel
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.feature_selection import SelectFromModel
+from sklearn.feature_selection import SelectFromModel, RFE
 from sklearn.pipeline import Pipeline
-from sklearn.svm import LinearSVC
+from skgarden import MondrianForestClassifier
 
 from Prediction.text_utils import text_pipeline
 from gitMine.VCClasses import Repository, Commit, Comment, StateChange, Reference, Issue, PullRequest, IssueStates
@@ -276,7 +276,7 @@ def generate_training_data_seq(training_repo_: Repository,
 
 
 def train_classifier(training_data_: List[Dict[str, Any]], perform_feature_selection: bool=False) \
-        -> RandomForestClassifier:
+        -> MondrianForestClassifier:
     X = list()
     y = list()
     for point in training_data_:
@@ -284,12 +284,13 @@ def train_classifier(training_data_: List[Dict[str, Any]], perform_feature_selec
         y.append(1 if point['linked'] else -1)
     if perform_feature_selection:
         clf_ = Pipeline([
-          ('feature_selection', SelectFromModel(LinearSVC(penalty="l2"))),
-          ('classification', RandomForestClassifier(n_estimators=100, class_weight='balanced_subsample'))
+          ('feature_selection', SelectFromModel(RFE(
+              RandomForestClassifier(n_estimators=128, class_weight='balanced_subsample'), 5, step=1))),
+          ('classification', MondrianForestClassifier(n_estimators=128, bootstrap=True))
         ])
     else:
-        clf_ = RandomForestClassifier(n_estimators=100, class_weight='balanced_subsample')
-    clf_.fit(X, y)
+        clf_ = MondrianForestClassifier(n_estimators=128, bootstrap=True)
+    clf_.partial_fit(X, y)
     return clf_
 
 
