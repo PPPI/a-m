@@ -541,7 +541,7 @@ class Linker(object):
             pickle.dump(self.clf, open(os.path.join(path, 'clf_model', 'model.p'), 'wb'))
         if self.feature_generator:
             os.makedirs(os.path.dirname(os.path.join(path, 'feature_generator', 'gen.p')), exist_ok=True)
-            pickle.dump(self.clf, open(os.path.join(path, 'feature_generator', 'gen.p'), 'wb'))
+            pickle.dump(self.feature_generator, open(os.path.join(path, 'feature_generator', 'gen.p'), 'wb'))
 
     def __load_from_disk(self, path):
         """
@@ -624,7 +624,7 @@ if __name__ == '__main__':
     projects = [
         'PhilJay_MPAndroidChart',
         # 'ReactiveX_RxJava',
-        'palantir_plottable',
+        # 'palantir_plottable',
         # 'tensorflow_tensorflow',
     ]
     config = {
