@@ -18,7 +18,7 @@ if __name__ == '__main__':
         'PhilJay_MPAndroidChart',
         'ReactiveX_RxJava',
         'palantir_plottable',
-        # 'tensorflow_tensorflow',
+        'tensorflow_tensorflow',
     ]]
 
     for data_loc in data_locations:
@@ -31,4 +31,8 @@ if __name__ == '__main__':
     estimator = RandomForestClassifier(n_estimators=100, class_weight='balanced_subsample')
     selector = RFE(estimator, 5, step=1)
     selector = selector.fit(X, y)
-    print(list(zip(feature_names, selector.ranking_)))
+    result = 'Feature_name, Rank\n'
+    for name, rank in zip(feature_names, selector.ranking_):
+        result += '%s, %d\n' % (name, rank)
+    with open('selected_features.csv', 'w') as f:
+        f.write(result)

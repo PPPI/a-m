@@ -153,9 +153,10 @@ class Linker(object):
 
         similarity_config = None
         temporal_config = None
-        cache = None
+        cache = self.feature_generator.text_cache if self.feature_generator else None
         if self.use_sim_cs or self.use_sim_j or self.use_sim_d or self.use_file:
-            self.model, self.dictionary, cache = generate_tfidf(self.repository_obj, self.stopwords, self.min_tok_len)
+            self.model, self.dictionary, cache = generate_tfidf(self.repository_obj, self.stopwords, self.min_tok_len,
+                                                                cache=cache)
             similarity_config = {
                 'dict': self.dictionary,
                 'model': self.model,
@@ -351,14 +352,14 @@ class Linker(object):
                 if isinstance(event[1], Issue):
                     for other in predictions:
                         try:
-                            if ('#' + other) in truth['#' + id_]:
+                            if ('#' + other) in self.truth['#' + id_]:
                                 self.update_truth((id_, other))
                         except KeyError:
                             pass
                 elif isinstance(event[1], PullRequest):
                     for other in predictions:
                         try:
-                            if ('#' + id_) in truth['#' + other]:
+                            if ('#' + id_) in self.truth['#' + other]:
                                 self.update_truth((other, id_))
                         except KeyError:
                             pass

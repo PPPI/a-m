@@ -36,10 +36,16 @@ def main():
         max_age_to_keep = config['max_age_to_keep']
 
         for model in models:
+            print('Loading %s ...' % model)
             linkers[model] = Linker.load_from_disk(locations[model])
+            print('Loaded data from disk. Retraining Mondrian Forest...')
+            # XXX: Hack due to MondrianForests not working after a pickle-unpickle
+            linkers[model].fit(linkers[model].repository_obj, linkers[model].truth)
+            print('Forest retrained. Getting metadata...')
             most_recent_sha[model] = linkers[model].most_recent_sha()
             last_update[model] = linkers[model].most_recent_timestamp()
             threshold_mean[model] = linkers[model].get_mean_probability_of_true_link()
+            print('Loaded %s.' % model)
 
         server.register_introspection_functions()
 
@@ -103,7 +109,6 @@ def main():
 
             def record_link(self, project, issue_id, pr_id):
                 linkers[project].update_truth((issue_id, pr_id))
-
 
         server.register_instance(PredictionFunctions())
         print('Loading done, entering serve loop')
