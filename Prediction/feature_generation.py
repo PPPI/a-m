@@ -60,7 +60,7 @@ class FeatureGenerator(object):
     Class that provides easy access to feature generation under a particular configuration
     """
     def __init__(self, use_sim_cs, use_sim_j, use_social, use_temporal, use_file, use_pr_only, use_issue_only,
-                 use_sim_d, similarity_config=None, temporal_config=None, text_cache=None):
+                 use_sim_d, similarity_config=None, temporal_config=None, text_cache=None, selected=None):
         self.use_sim_cs = use_sim_cs
         self.use_sim_j = use_sim_j
         self.use_sim_d = use_sim_d
@@ -80,6 +80,7 @@ class FeatureGenerator(object):
         self.use_pr_only = use_pr_only
         self.use_issue_only = use_issue_only
         self.text_cache = dict() if text_cache is None else text_cache
+        self.selected = selected if selected is not None else list()
 
     def via_text_cache(self, key, obj, full=True):
         text_preprocessor = text_pipeline if full else preprocess_text
@@ -89,6 +90,11 @@ class FeatureGenerator(object):
         else:
             text = self.text_cache[key]
         return text
+
+    def get_tf(self, text):
+        tf = self.dictionary.doc2bow(text, return_missing=True)
+        tf = tf[0] + [(-1, sum(tf[1].values()))]
+        return tf
 
     def generate_features(self, issue_: Issue, pr: PullRequest, linked: bool) -> Dict[str, Any]:
         issue_id = issue_.id_
@@ -116,19 +122,20 @@ class FeatureGenerator(object):
             cosine = cosine_similarity(pr_vector, i_vector)
 
             pr_title_vector = np.zeros((len(self.dictionary.token2id) + 1,))
-            for index, value in self.model[self.dictionary.doc2bow(pr_title_text)]:
+
+            for index, value in self.model[self.get_tf(full_pr_text)]:
                 pr_title_vector[index] += value
             pr_comment_vector = np.zeros((len(self.dictionary.token2id) + 1,))
             try:
-                for index, value in self.model[self.dictionary.doc2bow(pr_desc_text)]:
+                for index, value in self.model[self.get_tf(pr_desc_text)]:
                     pr_comment_vector[index] += value
             except IndexError:
                 pass
             i_title_vector = np.zeros((len(self.dictionary.token2id) + 1,))
-            for index, value in self.model[self.dictionary.doc2bow(issue_title_text)]:
+            for index, value in self.model[self.get_tf(issue_title_text)]:
                 i_title_vector[index] += value
             i_comment_vector = np.zeros((len(self.dictionary.token2id) + 1,))
-            for index, value in self.model[self.dictionary.doc2bow(issue_report_text)]:
+            for index, value in self.model[self.get_tf(issue_report_text)]:
                 i_comment_vector[index] += value
 
             cosine_tt = cosine_similarity(pr_title_vector, i_title_vector)
@@ -254,4 +261,6 @@ class FeatureGenerator(object):
             features['bounces'] = len([s.to_ == IssueStates.open for s in issue_.states])
             features['existing_links'] = len(issue_.commits)
 
+        if self.selected:
+            features = {k: v for k, v in features.items() if k in ['pr', 'issue', 'linked'] + self.selected}
         return features

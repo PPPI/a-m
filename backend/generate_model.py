@@ -21,13 +21,13 @@ def main(args):
         truth = jsonpickle.decode(f.read())
 
     config = {
-        'use_issue_only': False,
+        'use_issue_only': True,
         'use_pr_only': True,
         'use_temporal': True,
-        'use_sim_cs': False,
+        'use_sim_cs': True,
         'use_sim_j': False,
-        'use_sim_d': True,
-        'use_file': False,
+        'use_sim_d': False,
+        'use_file': True,
         'use_social': True
     }
     print('Loaded repository %s' % repo.name)

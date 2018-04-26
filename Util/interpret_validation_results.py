@@ -68,7 +68,7 @@ def evaluate_at_threshold(result, th, top_k, truth):
 
 if __name__ == '__main__':
     location_format = '../data/dev_set/%s.json'
-    n_fold = 1
+    n_fold = 5
     projects = [
         'PhilJay_MPAndroidChart',
         # 'ReactiveX_RxJava',
@@ -79,8 +79,8 @@ if __name__ == '__main__':
     ]
     for project in projects:
         results = list()
-        for fold in range(n_fold):
-            with open((location_format[:-5] + '_results_f%d_NullExplicit_UNKExplicit_FullFeatures.txt') % (project, fold)) as f:
+        for fold in [n_fold - 1]:
+            with open((location_format[:-5] + '_results_f%d_selected_features_MF.txt') % (project, fold)) as f:
                 result_str = f.read()
             result = ast.literal_eval(result_str)
             results.append((fold, result))

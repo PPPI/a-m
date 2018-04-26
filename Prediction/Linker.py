@@ -20,7 +20,7 @@ from Util import utils_
 from Util.ReservedKeywords import java_reserved, c_reserved, cpp_reserved, javascript_reserved, python_reserved
 from Util.github_api_methods import parse_pr_ref, parse_issue_ref
 from Util.heuristic_methods import extract_issue_numbers
-from gitMine.VCClasses import IssueStates, Commit, Issue, PullRequest
+from gitMine.VCClasses import IssueStates, Commit, Issue, PullRequest, StateChange
 
 
 def evaluate_at_threshold(result, th, truth):
@@ -127,6 +127,7 @@ class Linker(object):
         self.model = None
         self.dictionary = None
         self.feature_generator = None
+        self.features = None
         self.prediction_threshold = 1e-5
         self.predictions_from_last_tf_idf_update = 0
         self.predictions_between_updates = predictions_between_updates
@@ -147,9 +148,10 @@ class Linker(object):
             assert self.min_tok_len is not None
             assert self.stopwords is not None
 
-    def fit(self, repository_obj, truth):
+    def fit(self, repository_obj, truth, features=None):
         self.repository_obj = repository_obj
         self.truth = truth
+        self.features = features
 
         similarity_config = None
         temporal_config = None
@@ -181,6 +183,7 @@ class Linker(object):
             similarity_config=similarity_config,
             temporal_config=temporal_config,
             text_cache=cache,
+            selected=self.features,
         )
         self.clf = train_classifier(generate_training_data(self.repository_obj,
                                                            self.feature_generator,
@@ -298,7 +301,8 @@ class Linker(object):
                     use_issue_only=self.use_issue_only,
                     similarity_config=similarity_config,
                     temporal_config=temporal_config,
-                    text_cache=new_cache
+                    text_cache=new_cache,
+                    selected=self.features,
                 )
         return response
 
@@ -319,11 +323,17 @@ class Linker(object):
             if event[0] not in self.repository_obj.commits:
                 self.repository_obj.commits.append(event[0])
         elif isinstance(event[1], Issue):
-            prediction = self.predict(event[1])
+            prediction = None
+            if len([i for i in self.repository_obj.issues if i.id_ == event[1].id_]) == 0 or \
+                (isinstance(event[0], StateChange) and event[0].to_ == IssueStates.closed):
+                prediction = self.predict(event[1])
             update(event, self.repository_obj.issues)
             return prediction
         else:
-            prediction = self.predict(event[1])
+            prediction = None
+            if len([p for p in self.repository_obj.prs if i.id_ == event[1].id_]) == 0 or \
+                (isinstance(event[0], StateChange) and event[0].to_ == IssueStates.merged):
+                prediction = self.predict(event[1])
             update(event, self.repository_obj.prs)
             return prediction
 
@@ -342,6 +352,7 @@ class Linker(object):
 
     def validate_over_suffix(self, suffix):
         scores = list()
+        unk_rate = list()
         for event in suffix:
             result = self.update_from_flat_repo_and_predict(event)
             if result:
@@ -349,21 +360,27 @@ class Linker(object):
                 id_, predictions = result
                 predictions = [t[0][len('issue_'):] for t in predictions[:5]]
                 id_ = id_[len('issue_'):]
+                UNKs = self.feature_generator.get_tf(self.feature_generator.via_text_cache(id_, event[1]))[-1][-1]
+                unk_rate.append(UNKs)
                 if isinstance(event[1], Issue):
                     for other in predictions:
                         try:
                             if ('#' + other) in self.truth['#' + id_]:
                                 self.update_truth((id_, other))
+                            else:
+                                self.update_truth((id_, other), is_true=False)
                         except KeyError:
-                            pass
+                            self.update_truth((id_, other), is_true=False)
                 elif isinstance(event[1], PullRequest):
                     for other in predictions:
                         try:
                             if ('#' + id_) in self.truth['#' + other]:
                                 self.update_truth((other, id_))
+                            else:
+                                self.update_truth((other, id_), is_true=False)
                         except KeyError:
-                            pass
-        return scores
+                            self.update_truth((other, id_), is_true=False)
+        return scores, unk_rate
 
     def update_from_github(self, gh, since):
         """
@@ -385,6 +402,7 @@ class Linker(object):
             if pr_ref.number in pr_numbers:
                 old_pr = [pr for pr in self.repository_obj.prs if pr.number == pr_ref.number][0]
                 self.repository_obj.prs.remove(old_pr)
+            self.repository_obj.prs.append(pr)
             try:
                 all_text = '\n'.join([c.body for c in pr.comments] + [c.title + c.desc for c in pr.commits])
                 issue_numbers = extract_issue_numbers(all_text)
@@ -393,7 +411,6 @@ class Linker(object):
                     self.update_truth((issue_id[1:], pr.number[len('issue_'):]))
             except TypeError:
                 pass
-            self.repository_obj.prs.append(pr)
 
         issue_refs = [ref for ref in repo.get_issues(state='all', since=since)]
         for issue_ref in issue_refs:
@@ -405,6 +422,7 @@ class Linker(object):
             if issue.id_ in issue_ids:
                 existing_issue = [i for i in self.repository_obj.issues if i.id_ == issue.id_][0]
                 self.repository_obj.issues.remove(existing_issue)
+            self.repository_obj.issues.append(issue)
             try:
                 all_text = '\n'.join([c.body for c in pr.comments] + [c.title + c.desc for c in pr.commits])
                 issue_numbers = extract_issue_numbers(all_text)
@@ -413,7 +431,6 @@ class Linker(object):
                     self.update_truth((issue.id_[len('issue_'):], pr_id))
             except TypeError:
                 pass
-            self.repository_obj.issues.append(issue)
 
     def update_from_local_git(self, git_location, since_sha):
         """
@@ -437,21 +454,26 @@ class Linker(object):
             if len([_ for _ in self.repository_obj.commits if _.c_hash.startswith(commit.c_hash)]) > 0:
                 self.repository_obj.commits.append(commit)
 
-    def update_truth(self, link):
+    def update_truth(self, link, is_true=True):
         """
         Update the inner representation with a new link
         :param link: a link tuple, issue id in first and pr number in second
+        :param is_true: If the link is a true link or if we only wish to do a model update
         """
+        if is_true:
+            try:
+                if ('#' + link[1]) not in self.truth['#' + link[0]]:
+                    self.truth['#' + link[0]].append('#' + link[1])
+            except KeyError:
+                self.truth['#' + link[0]] = ['#' + link[1]]
         try:
-            if ('#' + link[1]) not in self.truth['#' + link[0]]:
-                self.truth['#' + link[0]].append('#' + link[1])
-        except KeyError:
-            self.truth['#' + link[0]] = ['#' + link[1]]
-        point = self.feature_generator.generate_features(
-                [i for i in self.repository_obj.issues if i.id_[len('issue_'):] == link[0]][0],
-                [p for p in self.repository_obj.prs if p.number[len('issue_'):] == link[1]][0],
-                linked=True)
-        self.clf = self.clf.partial_fit([tuple([v for k, v in point.items() if k not in ['linked', 'issue', 'pr']])], [1])
+            point = self.feature_generator.generate_features(
+                    [i for i in self.repository_obj.issues if i.id_[len('issue_'):] == link[0]][0],
+                    [p for p in self.repository_obj.prs if p.number[len('issue_'):] == link[1]][0],
+                    linked=True)
+            self.clf = self.clf.partial_fit([tuple([v for k, v in point.items() if k not in ['linked', 'issue', 'pr']])], [1])
+        except IndexError:
+            pass
 
     def trim_truth(self):
         """
@@ -625,16 +647,16 @@ if __name__ == '__main__':
     projects = [
         'PhilJay_MPAndroidChart',
         # 'ReactiveX_RxJava',
-        # 'palantir_plottable',
+        'palantir_plottable',
         # 'tensorflow_tensorflow',
     ]
     config = {
-        'use_issue_only': False,
+        'use_issue_only': True,
         'use_pr_only': True,
         'use_temporal': True,
-        'use_sim_cs': False,
-        'use_sim_j': True,
-        'use_sim_d': True,
+        'use_sim_cs': True,
+        'use_sim_j': False,
+        'use_sim_d': False,
         'use_file': True,
         'use_social': True
     }
@@ -650,6 +672,7 @@ if __name__ == '__main__':
     #     ('report_size participants bounces existing_links ' if config['use_issue_only'] else '')
     # features_string = features_string.strip().split(' ')
     # index_feature_map = {i: features_string[i] for i in range(len(features_string))}
+    features = ['cosine_tc', 'report_size', 'branch_size', 'files_touched_by_pr', 'developer_normalised_lag']
     stopwords = utils_.GitMineUtils.STOPWORDS \
                 + list(set(java_reserved + c_reserved + cpp_reserved + javascript_reserved + python_reserved))
     for project in projects:
@@ -663,18 +686,18 @@ if __name__ == '__main__':
 
         batches = generate_batches(repo, n_batches)
         for i in [n_batches - 1]:
-            linker = Linker(net_size_in_days=14, min_tok_len=3, undersample_multiplicity=1, stopwords=stopwords,
+            linker = Linker(net_size_in_days=14, min_tok_len=3, undersample_multiplicity=1000, stopwords=stopwords,
                             feature_config=config, predictions_between_updates=1000)
             training = list()
             for j in range(n_batches - 1):
                 training += batches[j]
-            linker.fit(inflate_events(training, repo.langs, repo.name), truth)
+            linker.fit(inflate_events(training, repo.langs, repo.name), truth, features=features)
             # forest = linker.clf
             # importances = forest.feature_importances_
             # std = np.std([tree.feature_importances_ for tree in forest.estimators_], axis=0)
             # pd.DataFrame(data={'Feature': features_string, 'Importance': importances, 'STD': std}) \
             #     .to_csv(project_dir[:-5] + ('_results_f%d_NullExplicit_UNKExplicit_FullFeatures_IMP.csv' % i))
-            scores = linker.validate_over_suffix(batches[i])
+            scores, unk_rate = linker.validate_over_suffix(batches[i])
             scores_dict = dict()
             for pr_id, predictions in scores:
                 try:
@@ -685,5 +708,8 @@ if __name__ == '__main__':
                 scores_dict[pr_id] = list(scores_dict[pr_id])
                 scores_dict[pr_id] = sorted(scores_dict[pr_id], reverse=True, key=lambda p: (p[1], p[0]))
 
-            with open(project_dir[:-5] + ('_results_f%d_NullExplicit_UNKExplicit_FullFeatures.txt' % i), 'w') as f:
+            with open(project_dir[:-5] + ('_results_f%d_selected_features_MF.txt' % i), 'w') as f:
                 f.write(str(scores_dict))
+
+            with open(project_dir[:-5] + ('_unk_rate_f%d_selected_features_MF.txt' % i), 'w') as f:
+                f.write(str(unk_rate))

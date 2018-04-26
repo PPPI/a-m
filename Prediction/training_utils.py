@@ -286,10 +286,10 @@ def train_classifier(training_data_: List[Dict[str, Any]], perform_feature_selec
         clf_ = Pipeline([
           ('feature_selection', SelectFromModel(RFE(
               RandomForestClassifier(n_estimators=128, class_weight='balanced_subsample'), 5, step=1))),
-          ('classification', MondrianForestClassifier(n_estimators=128, bootstrap=True))
+          ('classification', MondrianForestClassifier(n_estimators=50,))
         ])
     else:
-        clf_ = MondrianForestClassifier(n_estimators=128, bootstrap=True)
+        clf_ = MondrianForestClassifier(n_estimators=50,)
     clf_.partial_fit(X, y)
     return clf_
 
