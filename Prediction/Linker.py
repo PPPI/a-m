@@ -331,7 +331,7 @@ class Linker(object):
             return prediction
         else:
             prediction = None
-            if len([p for p in self.repository_obj.prs if p.number == event[1].id_]) == 0 or \
+            if len([p for p in self.repository_obj.prs if p.number == event[1].number]) == 0 or \
                 (isinstance(event[0], StateChange) and event[0].to_ == IssueStates.merged):
                 prediction = self.predict(event[1])
             update(event, self.repository_obj.prs)
