@@ -70,8 +70,8 @@ if __name__ == '__main__':
     location_format = '../data/dev_set/%s.json'
     n_fold = 5
     projects = [
-        'PhilJay_MPAndroidChart',
-        # 'ReactiveX_RxJava',
+        # 'PhilJay_MPAndroidChart',
+        'ReactiveX_RxJava',
         # 'google_guava',
         # 'facebook_react',
         # 'palantir_plottable',
@@ -80,7 +80,7 @@ if __name__ == '__main__':
     for project in projects:
         results = list()
         for fold in [n_fold - 1]:
-            with open((location_format[:-5] + '_results_f%d_selected_features_MF.txt') % (project, fold)) as f:
+            with open((location_format[:-5] + '_results_f%d_selected_features_MF_p.txt') % (project, fold)) as f:
                 result_str = f.read()
             result = ast.literal_eval(result_str)
             results.append((fold, result))
@@ -88,15 +88,13 @@ if __name__ == '__main__':
         with open((location_format[:-5] + '_truth.json') % project) as f:
             truth = jsonpickle.decode(f.read())
 
-        temp = dict()
+        truth_pr = dict()
         for issue in truth.keys():
             for pr in truth[issue]:
                 try:
-                    temp[pr].add(issue)
+                    truth_pr[pr].add(issue)
                 except KeyError:
-                    temp[pr] = {issue}
-        truth = temp
-        temp = None
+                    truth_pr[pr] = {issue}
 
         data = {'Threshold': list(), 'K': list(), 'Hit-rate': list(), 'Average Precision': list(),
                 'Mean Reciprocal Rank': list(), 'Discounted Cumulative Gain': list(),
@@ -104,7 +102,7 @@ if __name__ == '__main__':
         for result in results.values():
             for th in np.arange(.0, 1., step=.01):
                 for top_k in [1, 3, 5, 7, 10, 15, 20, 'inf']:
-                    hit, ap, mrr, dcg, fpr, fnr = evaluate_at_threshold(result, th, top_k, truth)
+                    hit, ap, mrr, dcg, fpr, fnr = evaluate_at_threshold(result, th, top_k, truth_pr)
 
                     data['Threshold'].append(float('%.5f' % th))
                     data['K'].append(top_k)
@@ -115,4 +113,4 @@ if __name__ == '__main__':
                     data['False Positive Rate'].append(fpr)
                     data['False Negative Rate'].append(fnr)
 
-        pd.DataFrame(data=data).to_csv((location_format[:-len('.json')] + '_results_interpreted_MF.csv') % project)
+        pd.DataFrame(data=data).to_csv((location_format[:-len('.json')] + '_results_interpreted_MF_p.csv') % project)
