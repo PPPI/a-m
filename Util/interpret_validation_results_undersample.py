@@ -109,58 +109,59 @@ if __name__ == '__main__':
     location_format = '../data/dev_set/%s.json'
     n_fold = 5
     projects = [
-        # 'PhilJay_MPAndroidChart',
+        'PhilJay_MPAndroidChart',
         # 'ReactiveX_RxJava',
         # 'google_guava',
         # 'facebook_react',
-        'palantir_plottable',
+        # 'palantir_plottable',
         # 'tensorflow_tensorflow', # Dev set end
     ]
     for project in projects:
-        results_i = list()
-        for fold in [n_fold - 1]:
-            with open((location_format[:-5] + '_results_i_f%d_selected_features_MF_restricted_p.txt') % (project, fold)) as f:
-                result_str = f.read()
-            result = ast.literal_eval(result_str)
-            results_i.append((fold, result))
-        results_i = dict(results_i)
+        for under in [1, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000]:
+            results_i = list()
+            for fold in [n_fold - 1]:
+                with open((location_format[:-5] + '_RAW_i_results_f%d_ioTrue_poTrue_tTrue_csTrue_jTrue_fTrue_sTrue_u%d.txt') % (project, fold, under)) as f:
+                    result_str = f.read()
+                result = ast.literal_eval(result_str)
+                results_i.append((fold, result))
+            results_i = dict(results_i)
 
-        results_p = list()
-        for fold in [n_fold - 1]:
-            with open((location_format[:-5] + '_results_p_f%d_selected_features_MF_restricted_p.txt') % (project, fold)) as f:
-                result_str = f.read()
-            result = ast.literal_eval(result_str)
-            results_p.append((fold, result))
-        results_p = dict(results_p)
+            results_p = list()
+            for fold in [n_fold - 1]:
+                with open((location_format[:-5] + '_RAW_p_results_f%d_ioTrue_poTrue_tTrue_csTrue_jTrue_fTrue_sTrue_u%d.txt') % (project, fold, under)) as f:
+                    result_str = f.read()
+                result = ast.literal_eval(result_str)
+                results_p.append((fold, result))
+            results_p = dict(results_p)
 
-        with open((location_format[:-5] + '_truth.json') % project) as f:
-            truth = jsonpickle.decode(f.read())
+            with open((location_format[:-5] + '_truth.json') % project) as f:
+                truth = jsonpickle.decode(f.read())
 
-        truth_pr = dict()
-        for issue in truth.keys():
-            for pr in truth[issue]:
-                try:
-                    truth_pr[pr].add(issue)
-                except KeyError:
-                    truth_pr[pr] = {issue}
+            truth_pr = dict()
+            for issue in truth.keys():
+                for pr in truth[issue]:
+                    try:
+                        truth_pr[pr].add(issue)
+                    except KeyError:
+                        truth_pr[pr] = {issue}
 
-        data = {'Threshold': list(), 'K': list(), 'Hit-rate': list(), 'Average Precision': list(),
-                'Mean Reciprocal Rank': list(), 'Discounted Cumulative Gain': list(),
-                'False Positive Rate': list(), 'False Negative Rate': list()}
-        for fold in [n_fold - 1]:
-            result_p = results_p[fold]
-            result_i = results_i[fold]
-            for th in np.arange(.0, 1., step=.01):
-                for top_k in [1, 3, 5, 7, 10, 15, 20, 'inf']:
-                    hit, ap, mrr, dcg, fpr, fnr = evaluate_at_threshold(result_p, result_i, th, top_k, truth_pr, truth)
+            data = {'Threshold': list(), 'K': list(), 'Hit-rate': list(), 'Average Precision': list(),
+                    'Mean Reciprocal Rank': list(), 'Discounted Cumulative Gain': list(),
+                    'False Positive Rate': list(), 'False Negative Rate': list()}
+            for fold in [n_fold - 1]:
+                result_p = results_p[fold]
+                result_i = results_i[fold]
+                for th in np.arange(.0, 1., step=.01):
+                    for top_k in [1, 3, 5, 7, 10, 15, 20, 'inf']:
+                        hit, ap, mrr, dcg, fpr, fnr = evaluate_at_threshold(result_p, result_i, th, top_k, truth_pr, truth)
 
-                    data['Threshold'].append(float('%.5f' % th))
-                    data['K'].append(top_k)
-                    data['Hit-rate'].append(hit)
-                    data['Average Precision'].append(ap)
-                    data['Mean Reciprocal Rank'].append(mrr)
-                    data['Discounted Cumulative Gain'].append(dcg)
-                    data['False Positive Rate'].append(fpr)
-                    data['False Negative Rate'].append(fnr)
+                        data['Threshold'].append(float('%.5f' % th))
+                        data['K'].append(top_k)
+                        data['Hit-rate'].append(hit)
+                        data['Average Precision'].append(ap)
+                        data['Mean Reciprocal Rank'].append(mrr)
+                        data['Discounted Cumulative Gain'].append(dcg)
+                        data['False Positive Rate'].append(fpr)
+                        data['False Negative Rate'].append(fnr)
 
-        pd.DataFrame(data=data).to_csv((location_format[:-len('.json')] + '_results_interpreted_MF_restricted_p.csv') % project)
+            pd.DataFrame(data=data).to_csv((location_format[:-len('.json')] + '_results_interpreted_MF_restricted_t_u%d.csv') % (project, under))

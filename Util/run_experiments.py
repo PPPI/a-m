@@ -17,6 +17,7 @@ if __name__ == '__main__':
 
     stopwords = utils_.GitMineUtils.STOPWORDS \
                 + list(set(java_reserved + c_reserved + cpp_reserved + javascript_reserved + python_reserved))
+    features = ['cosine_tc', 'report_size', 'branch_size', 'files_touched_by_pr', 'developer_normalised_lag']
     # configs = itertools.product([True, False], repeat=8)
     configs = [[True]*8]
     for use_sim_cs, use_sim_j, use_sim_d, use_file, use_social, use_temporal, use_pr_only, use_issue_only in configs:
@@ -32,20 +33,7 @@ if __name__ == '__main__':
             'use_file': use_file,
             'use_social': use_social
         }
-        # features_string = \
-        #     ('cosine cosine_tt cosine_tc cosine_ct cosine_cc ' if config['use_sim_cs'] else '') + \
-        #     ('jaccard jaccard_tt jaccard_tc jaccard_ct jaccard_cc ' if config['use_sim_j'] else '') + \
-        #     ('dice dice_tt dice_tc dice_ct dice_cc ' if config['use_sim_d'] else '') + \
-        #     ('files_shared ' if config['use_file'] else '') + \
-        #     ('is_reporter is_assignee engagement in_top_2 in_comments ' if config['use_social'] else '') + \
-        #     (
-        #         'developer_normalised_lag lag_from_issue_open_to_pr_submission '
-        #         'lag_from_last_issue_update_to_pr_submission '
-        #         if config['use_temporal'] else '') + \
-        #     ('no_pr_desc branch_size files_touched_by_pr ' if config['use_pr_only'] else '') + \
-        #     ('report_size participants bounces existing_links ' if config['use_issue_only'] else '')
-        # features_string = features_string.strip().split(' ')
-        # index_feature_map = {i: features_string[i] for i in range(len(features_string))}
+
         for project in projects:
             n_batches = 5
             project_dir = location_format % project
@@ -56,37 +44,31 @@ if __name__ == '__main__':
                 truth = jsonpickle.decode(f.read())
 
             batches = generate_batches(repo, n_batches)
-            for i in [n_batches - 1]:
-                linker = Linker(net_size_in_days=14, min_tok_len=3, undersample_multiplicity=1000, stopwords=stopwords,
-                                feature_config=config, predictions_between_updates=1000)
-                training = list()
-                for j in range(n_batches - 1):
-                    training += batches[j]
-                linker.fit(inflate_events(training, repo.langs, repo.name), truth)
-                # forest = linker.clf
-                # importances = forest.feature_importances_
-                # std = np.std([tree.feature_importances_ for tree in forest.estimators_], axis=0)
-                # pd.DataFrame(data={'Feature': features_string, 'Importance': importances, 'STD': std}) \
-                #     .to_csv(project_dir[:-5] + ('_IMP_results_f%d_io%s_po%s_t%s_cs%s_j%s_f%s_s%s.csv' %
-                #                                 (i, use_issue_only, use_pr_only, use_temporal, use_sim_cs,
-                #                                  use_sim_j, use_file, use_social)))
-                scores, unk_rate = linker.validate_over_suffix(batches[i])
-                scores_dict = dict()
-                for pr_id, predictions in scores:
-                    try:
-                        scores_dict[pr_id].union(set(predictions))
-                    except KeyError:
-                        scores_dict[pr_id] = set(predictions)
-                for pr_id in scores_dict.keys():
-                    scores_dict[pr_id] = list(scores_dict[pr_id])
-                    scores_dict[pr_id] = sorted(scores_dict[pr_id], reverse=True, key=lambda p: (p[1], p[0]))
+            for under in [1, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000]:
+                for i in [n_batches - 1]:
+                    linker = Linker(net_size_in_days=7, min_tok_len=2, undersample_multiplicity=under, stopwords=stopwords,
+                                    feature_config=config, predictions_between_updates=1000)
+                    training = list()
+                    for j in range(n_batches - 1):
+                        training += batches[j]
+                    linker.fit(inflate_events(training, repo.langs, repo.name), truth, features=features)
+                    scores, unk_rate = linker.validate_over_suffix(batches[i])
+                    pr_numbers = [pr.number for pr in repo.prs]
+                    issue_ids = [issue.id_ for issue in repo.issues]
+                    scores_p = dict([(id_, pred) for id_, pred in scores if id_ in pr_numbers])
+                    scores_i = dict([(id_, pred) for id_, pred in scores if id_ in issue_ids])
 
-                with open(project_dir[:-5] + ('_RAW_results_f%d_io%s_po%s_t%s_cs%s_j%s_f%s_s%s.txt' %
-                                              (i, use_issue_only, use_pr_only, use_temporal, use_sim_cs,
-                                               use_sim_j, use_file, use_social)), 'w') as f:
-                    f.write(str(scores_dict))
+                    with open(project_dir[:-5] + ('_RAW_p_results_f%d_io%s_po%s_t%s_cs%s_j%s_f%s_s%s_u%d.txt' %
+                                                  (i, use_issue_only, use_pr_only, use_temporal, use_sim_cs,
+                                                   use_sim_j, use_file, use_social, under)), 'w') as f:
+                        f.write(str(scores_p))
 
-                with open(project_dir[:-5] + ('_RAW_unk_rate_f%d_io%s_po%s_t%s_cs%s_j%s_f%s_s%s.txt' %
-                                              (i, use_issue_only, use_pr_only, use_temporal, use_sim_cs,
-                                               use_sim_j, use_file, use_social)), 'w') as f:
-                    f.write(str(unk_rate))
+                    with open(project_dir[:-5] + ('_RAW_i_results_f%d_io%s_po%s_t%s_cs%s_j%s_f%s_s%s_u%d.txt' %
+                                                  (i, use_issue_only, use_pr_only, use_temporal, use_sim_cs,
+                                                   use_sim_j, use_file, use_social, under)), 'w') as f:
+                        f.write(str(scores_i))
+
+                    with open(project_dir[:-5] + ('_RAW_unk_rate_f%d_io%s_po%s_t%s_cs%s_j%s_f%s_s%s_u%d.txt' %
+                                                  (i, use_issue_only, use_pr_only, use_temporal, use_sim_cs,
+                                                   use_sim_j, use_file, use_social, under)), 'w') as f:
+                        f.write(str(unk_rate))
