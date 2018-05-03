@@ -20,7 +20,7 @@ from Util import utils_
 from Util.ReservedKeywords import java_reserved, c_reserved, cpp_reserved, javascript_reserved, python_reserved
 from Util.github_api_methods import parse_pr_ref, parse_issue_ref
 from Util.heuristic_methods import extract_issue_numbers
-from gitMine.VCClasses import IssueStates, Commit, Issue, PullRequest, StateChange
+from gitMine.VCClasses import IssueStates, Commit, Issue, PullRequest, StateChange, Comment
 
 
 def evaluate_at_threshold(result, th, truth):
@@ -199,8 +199,8 @@ class Linker(object):
             prediction_object.comments = prediction_object.comments[:1]
             open_issues = [i for i in self.repository_obj.issues
                            if
-                           (len(i.states) == 0 or i.states[-1].to_ == IssueStates.open)
-                           or
+                           # (len(i.states) == 0 or i.states[-1].to_ == IssueStates.open)
+                           # or
                            (min([abs(entity.timestamp - prediction_object.comments[0].timestamp)
                                  if entity.timestamp and prediction_object.comments
                                  else timedelta(days=self.net_size_in_days, seconds=1)
@@ -325,29 +325,33 @@ class Linker(object):
         elif isinstance(event[1], Issue):
             prediction = None
             if len([i for i in self.repository_obj.issues if i.id_ == event[1].id_]) == 0 or \
-                (isinstance(event[0], StateChange) and event[0].to_ == IssueStates.closed):
+                (isinstance(event[0], StateChange) and event[0].to_ == IssueStates.closed) or \
+                (isinstance(event[0], StateChange) and event[0].to_ == IssueStates.merged) or \
+                (isinstance(event[0], Comment)):
                 prediction = self.predict(event[1])
             update(event, self.repository_obj.issues)
             return prediction
         else:
             prediction = None
             if len([p for p in self.repository_obj.prs if p.number == event[1].number]) == 0 or \
-                (isinstance(event[0], StateChange) and event[0].to_ == IssueStates.merged):
+                (isinstance(event[0], StateChange) and event[0].to_ == IssueStates.merged) or \
+                (isinstance(event[0], StateChange) and event[0].to_ == IssueStates.closed) or \
+                (isinstance(event[0], Comment)):
                 prediction = self.predict(event[1])
             update(event, self.repository_obj.prs)
             return prediction
 
     def request_prediction(self, issue_or_pr):
-        # if isinstance(issue_or_pr, Issue):
-        #     old_issue = [i for i in self.repository_obj.issues if i.id_ == issue_or_pr.id_]
-        #     if len(old_issue) == 1:
-        #         self.repository_obj.issues.remove(old_issue)
-        #     self.repository_obj.issues.append(issue_or_pr)
-        # elif isinstance(issue_or_pr, PullRequest):
-        #     old_pr = [p for p in self.repository_obj.prs if p.number == issue_or_pr.number]
-        #     if len(old_pr) == 1:
-        #         self.repository_obj.prs.remove(old_pr)
-        #     self.repository_obj.prs.append(issue_or_pr)
+        if isinstance(issue_or_pr, Issue):
+            old_issue = [i for i in self.repository_obj.issues if i.id_ == issue_or_pr.id_]
+            if len(old_issue) == 1:
+                self.repository_obj.issues.remove(old_issue[0])
+            self.repository_obj.issues.append(issue_or_pr)
+        elif isinstance(issue_or_pr, PullRequest):
+            old_pr = [p for p in self.repository_obj.prs if p.number == issue_or_pr.number]
+            if len(old_pr) == 1:
+                self.repository_obj.prs.remove(old_pr[0])
+            self.repository_obj.prs.append(issue_or_pr)
         return self.predict(issue_or_pr)[1]
 
     def validate_over_suffix(self, suffix):
@@ -472,9 +476,8 @@ class Linker(object):
                     [i for i in self.repository_obj.issues if i.id_[len('issue_'):] == link[0]][0],
                     [p for p in self.repository_obj.prs if p.number[len('issue_'):] == link[1]][0],
                     linked=is_true)
-            if is_true:
-                self.clf = self.clf.partial_fit([tuple([v for k, v in point.items() if k not in ['linked', 'issue', 'pr']])],
-                                                [1 if is_true else 0])
+            self.clf = self.clf.partial_fit([tuple([v for k, v in point.items() if k not in ['linked', 'issue', 'pr']])],
+                                            [1 if is_true else -1])
         except IndexError:
             pass
 
@@ -677,8 +680,8 @@ if __name__ == '__main__':
 
         batches = generate_batches(repo, n_batches)
         for i in [n_batches - 1]:
-            linker = Linker(net_size_in_days=7, min_tok_len=2, undersample_multiplicity=10000, stopwords=stopwords,
-                            feature_config=config, predictions_between_updates=10000)
+            linker = Linker(net_size_in_days=7, min_tok_len=2, undersample_multiplicity=1e15, stopwords=stopwords,
+                            feature_config=config, predictions_between_updates=1e15)
             training = list()
             for j in range(n_batches - 1):
                 training += batches[j]
