@@ -6,8 +6,8 @@ from collections import Counter
 
 import math
 
-from Prediction.text_utils import ps, text_pipeline, preprocess_text
-from gitMine.VCClasses import Issue, PullRequest, IssueStates
+from Prediction.text_utils import ps, text_pipeline, preprocess_text, merge_commit_title_and_desc
+from gitMine.VCClasses import Issue, PullRequest, IssueStates, Commit
 
 
 def cosine_similarity(vec1, vec2):
@@ -123,7 +123,7 @@ class FeatureGenerator(object):
 
             pr_title_vector = np.zeros((len(self.dictionary.token2id) + 1,))
 
-            for index, value in self.model[self.get_tf(full_pr_text)]:
+            for index, value in self.model[self.get_tf(pr_title_text)]:
                 pr_title_vector[index] += value
             pr_comment_vector = np.zeros((len(self.dictionary.token2id) + 1,))
             try:
@@ -254,6 +254,171 @@ class FeatureGenerator(object):
             features['no_pr_desc'] = no_pr_desc
             features['branch_size'] = len(pr.commits)
             features['files_touched_by_pr'] = len(pr.diffs)
+
+        if self.use_issue_only:
+            features['report_size'] = len(issue_.original_post.body)
+            features['participants'] = len(set([c.author for c in issue_.replies + [issue_.original_post]]))
+            features['bounces'] = len([s.to_ == IssueStates.open for s in issue_.states])
+            features['existing_links'] = len(issue_.commits)
+
+        if self.selected:
+            features = {k: v for k, v in features.items() if k in ['pr', 'issue', 'linked'] + self.selected}
+        return features
+
+    def generate_features_commit(self, issue_: Issue, commit: Commit, linked: bool) -> Dict[str, Any]:
+        issue_id = issue_.id_
+        commit_sha = commit.c_hash
+        features = {'issue': issue_id, 'commit': commit_sha, 'linked': linked}
+        if self.use_sim_cs or self.use_sim_j or self.use_sim_d or self.use_file:
+            full_issue_text = self.via_text_cache(issue_id, issue_)
+
+        if self.use_sim_cs or self.use_sim_j or self.use_sim_d:
+            full_commit_text = self.via_text_cache(commit_sha, commit)
+            commit_title_text = self.via_text_cache(commit_sha + '_t', commit.title, False)
+            commit_desc_text = self.via_text_cache(commit_sha + '_d', merge_commit_title_and_desc(commit), False)
+            issue_title_text = self.via_text_cache(issue_id + '_t', issue_.title, False)
+            issue_report_text = self.via_text_cache(issue_id + '_r', issue_.original_post.body, False)
+
+        if self.use_sim_cs:
+            # The vector is 1 longer than the number of ids so we can have UNK at the end (-1)
+            c_vector = np.zeros((len(self.dictionary.token2id) + 1,))
+            for index, value in self.model[self.dictionary.doc2bow(full_commit_text)]:
+                c_vector[index] += value
+            i_vector = np.zeros((len(self.dictionary.token2id) + 1,))
+            for index, value in self.model[self.dictionary.doc2bow(full_issue_text)]:
+                i_vector[index] += value
+
+            cosine = cosine_similarity(c_vector, i_vector)
+
+            c_title_vector = np.zeros((len(self.dictionary.token2id) + 1,))
+
+            for index, value in self.model[self.get_tf(commit_title_text)]:
+                c_title_vector[index] += value
+            c_comment_vector = np.zeros((len(self.dictionary.token2id) + 1,))
+            try:
+                for index, value in self.model[self.get_tf(commit_desc_text)]:
+                    c_comment_vector[index] += value
+            except IndexError:
+                pass
+            i_title_vector = np.zeros((len(self.dictionary.token2id) + 1,))
+            for index, value in self.model[self.get_tf(issue_title_text)]:
+                i_title_vector[index] += value
+            i_comment_vector = np.zeros((len(self.dictionary.token2id) + 1,))
+            for index, value in self.model[self.get_tf(issue_report_text)]:
+                i_comment_vector[index] += value
+
+            cosine_tt = cosine_similarity(c_title_vector, i_title_vector)
+            cosine_tc = cosine_similarity(c_title_vector, i_comment_vector)
+            cosine_ct = cosine_similarity(c_comment_vector, i_title_vector)
+            cosine_cc = cosine_similarity(c_comment_vector, i_comment_vector)
+            features['cosine'] = cosine
+            features['cosine_tt'] = cosine_tt
+            features['cosine_tc'] = cosine_tc
+            features['cosine_ct'] = cosine_ct
+            features['cosine_cc'] = cosine_cc
+
+        if self.use_file or self.use_sim_j or self.use_sim_d:
+            words_in_issue = set(full_issue_text)
+
+        if self.use_sim_j or self.use_sim_d:
+            words_in_commit = set(full_commit_text)
+            words_in_commit_title = set(commit_title_text)
+            words_in_commit_desc = set(commit_desc_text)
+            words_in_issue_title = set(issue_title_text)
+            words_in_issue_report = set(issue_report_text)
+
+        if self.use_sim_j:
+            jaccard = jaccard_similarity(words_in_commit, words_in_issue)
+            jaccard_tt = jaccard_similarity(words_in_commit_title, words_in_issue_title)
+            jaccard_tc = jaccard_similarity(words_in_commit_title, words_in_issue_report)
+            jaccard_ct = jaccard_similarity(words_in_commit_desc, words_in_issue_title)
+            jaccard_cc = jaccard_similarity(words_in_commit_desc, words_in_issue_report)
+            features['jaccard'] = jaccard
+            features['jaccard_tt'] = jaccard_tt
+            features['jaccard_tc'] = jaccard_tc
+            features['jaccard_ct'] = jaccard_ct
+            features['jaccard_cc'] = jaccard_cc
+
+        if self.use_sim_d:
+            dice = dice_similarity(words_in_commit, words_in_issue)
+            dice_tt = dice_similarity(words_in_commit_title, words_in_issue_title)
+            dice_tc = dice_similarity(words_in_commit_title, words_in_issue_report)
+            dice_ct = dice_similarity(words_in_commit_desc, words_in_issue_title)
+            dice_cc = dice_similarity(words_in_commit_desc, words_in_issue_report)
+            features['dice'] = dice
+            features['dice_tt'] = dice_tt
+            features['dice_tc'] = dice_tc
+            features['dice_ct'] = dice_ct
+            features['dice_cc'] = dice_cc
+
+        if self.use_file:
+            files_in_commit = {ps.stem(str(os.path.basename(diff[0]).split('.')[0])) for diff in commit.diff}
+            files_in_issue = len(files_in_commit.intersection(words_in_issue)) / (len(issue_.replies) + 1)
+            features['files_shared'] = files_in_issue
+
+        if self.use_social or self.use_temporal:
+            author = commit.author
+
+        if self.use_social:
+            reporter = issue_.original_post.author == author
+            assignee = issue_.assignee == author
+            engagement = len([reply
+                              for reply
+                              in [issue_.original_post] + issue_.replies
+                              if reply.author == author]) / (len(issue_.replies) + 1)
+            in_top_2 = author in [a for a, _
+                                  in
+                                  Counter(map(lambda c: c.author, [issue_.original_post] + issue_.replies)).most_common(
+                                      2)]
+            comments = engagement > .0
+            features['is_reporter'] = reporter
+            features['is_assignee'] = assignee
+            features['engagement'] = engagement
+            features['in_top_2'] = in_top_2
+            features['in_comments'] = comments
+
+        if self.use_temporal:
+            try:
+                lag = min([abs(entity.timestamp - commit.timestamp)
+                           if entity.timestamp
+                           else timedelta(seconds=self.fingerprint['AVG'])
+                           for entity in [issue_.original_post]
+                           + [reply for reply in issue_.replies if reply.author == author]
+                           + [state for state in issue_.states if state.to_ == IssueStates.closed]]).total_seconds()
+                # Scale lag on a per developer basis
+                try:
+                    lag /= self.fingerprint[author] if self.fingerprint[author] > .0 else self.fingerprint['AVG']
+                except KeyError:
+                    lag /= self.fingerprint['AVG']
+                # And centre around 0
+                lag -= 1
+            except ValueError:
+                lag = .0
+
+            if math.isnan(lag):
+                lag = .0
+
+            # Also absolute lag as a sanity check
+            try:
+                lag_close = min([abs(entity.timestamp - commit.timestamp)
+                                 for entity in
+                                 [state for state in issue_.states if state.to_ == IssueStates.closed]]).total_seconds()
+            except (ValueError, IndexError):
+                lag_close = timedelta(days=self.net_size_in_days, seconds=1).total_seconds()
+
+            try:
+                lag_open = (abs(issue_.original_post.timestamp - commit.timestamp)).total_seconds()
+            except TypeError:
+                lag_open = timedelta(days=self.net_size_in_days, seconds=1).total_seconds()
+
+            features['developer_normalised_lag'] = lag
+            features['lag_from_issue_open_to_pr_submission'] = lag_open
+            features['lag_from_last_issue_update_to_pr_submission'] = lag_close
+
+        if self.use_pr_only:
+            no_commit_desc = len(commit.desc) == 0
+            features['no_pr_desc'] = no_commit_desc
+            features['files_touched_by_commit'] = len(commit.diff)
 
         if self.use_issue_only:
             features['report_size'] = len(issue_.original_post.body)
