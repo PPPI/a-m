@@ -32,8 +32,8 @@ def main(args):
     }
     features = ['cosine_tc', 'report_size', 'branch_size', 'files_touched_by_pr', 'developer_normalised_lag']
     print('Loaded repository %s' % repo.name)
-    linker = Linker(net_size_in_days=30, min_tok_len=3, undersample_multiplicity=1000, feature_config=config,
-                    predictions_between_updates=1000, stopwords=stopwords)
+    linker = Linker(net_size_in_days=30, min_tok_len=2, undersample_multiplicity=1e20, feature_config=config,
+                    predictions_between_updates=1e10, stopwords=stopwords)
     linker.fit(repo, truth, features=features)
     print('Trained Random Forest classifier')
     out_path = os.path.join(os.getcwd(), 'models', repo.name[1:].translate({ord(c): '_' for c in '\\/'}))
