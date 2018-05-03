@@ -1,3 +1,6 @@
+import sys
+
+import jsonpickle
 import numpy as np
 import os
 from datetime import timedelta
@@ -7,6 +10,9 @@ from Prediction.Linker import Linker
 from Prediction.feature_generation import FeatureGenerator
 from Prediction.training_utils import generate_dev_fingerprint, train_classifier, \
     generate_training_data_commit, generate_tfidf_commit, null_issue, null_commit
+from Util import utils_
+from Util.CrossValidationSplits import cross_split_repo
+from Util.ReservedKeywords import java_reserved, c_reserved, cpp_reserved, javascript_reserved, python_reserved
 from gitMine.VCClasses import Commit, Issue
 
 
@@ -29,12 +35,12 @@ class Commit_Closure(object):
 
 
 class CommitLinker(Linker):
-    def __init__(self, net_size_in_days, undersample_multiplicity, feature_config):
-        super().__init__(net_size_in_days, undersample_multiplicity, feature_config)
+    def __init__(self, net_size_in_days, undersample_multiplicity, feature_config, stopwords=None):
+        super().__init__(net_size_in_days, undersample_multiplicity, feature_config, predictions_between_updates=10e15,
+                         min_tok_len=2, stopwords=stopwords)
 
-    def fit(self, repository_obj, truth, features=None):
+    def fit(self, repository_obj, truth=None, features=None):
         self.repository_obj = repository_obj
-        self.truth = truth
         self.features = features
 
         similarity_config = None
@@ -50,9 +56,8 @@ class CommitLinker(Linker):
                 'stopwords': self.stopwords,
             }
         if self.use_temporal:
-            self.fingerprint = generate_dev_fingerprint(self.repository_obj)
             temporal_config = {
-                'fingerprint': self.fingerprint,
+                'fingerprint': None,
                 'net_size_in_days': self.net_size_in_days,
             }
         self.feature_generator = FeatureGenerator(
@@ -97,7 +102,7 @@ class CommitLinker(Linker):
                            # (len(i.states) == 0 or i.states[-1].to_ == IssueStates.open)
                            # or
                            (min([abs(entity.timestamp - prediction_object.timestamp)
-                                 if entity.timestamp
+                                 if hasattr(entity, 'timestamp') and entity.timestamp
                                  else timedelta(days=self.net_size_in_days, seconds=1)
                                  for entity in
                                  [i.original_post]
@@ -134,7 +139,7 @@ class CommitLinker(Linker):
             candidates = [c for c in self.repository_obj.commits
                           if
                           (min([abs(entity.timestamp - c.timestamp)
-                                if entity.timestamp
+                                if hasattr(entity, 'timestamp') and entity.timestamp
                                 else timedelta(days=self.net_size_in_days, seconds=1)
                                 for entity in
                                 [prediction_object.original_post]
@@ -150,7 +155,8 @@ class CommitLinker(Linker):
                         prediction_data.append(point)
             else:
                 for commit in candidates:
-                    prediction_data.append(self.feature_generator.generate_features(prediction_object, commit, False))
+                    prediction_data.append(self.feature_generator.generate_features_commit(prediction_object,
+                                                                                           commit, False))
 
             for point in prediction_data:
                 probabilities = self.clf.predict_proba(np.array(tuple([v for k, v in point.items()
@@ -159,7 +165,7 @@ class CommitLinker(Linker):
                 if point['commit'] == 'null_commit':
                     threshold = max(threshold, probabilities[0][1])
                 else:
-                    prediction = (point['pr'], float(probabilities[0][1]))
+                    prediction = (point['commit'], float(probabilities[0][1]))
                     predictions.append(prediction)
             predictions = sorted([p for p in predictions if p[1] >= threshold],
                                  key=lambda p: (p[1], p[0]),
@@ -181,7 +187,7 @@ class CommitLinker(Linker):
                     'stopwords': self.stopwords,
                 }
                 if self.use_temporal:
-                    self.fingerprint = generate_dev_fingerprint(self.repository_obj)
+                    self.fingerprint = None
                     temporal_config = {
                         'fingerprint': self.fingerprint,
                         'net_size_in_days': self.net_size_in_days,
@@ -201,3 +207,82 @@ class CommitLinker(Linker):
                     selected=self.features,
                 )
         return response
+
+
+if __name__ == '__main__':
+    n_folds = 5
+    config = {
+        'use_issue_only': True,
+        'use_pr_only': True,
+        'use_temporal': True,
+        'use_sim_cs': True,
+        'use_sim_j': False,
+        'use_sim_d': False,
+        'use_file': True,
+        'use_social': True
+    }
+    features = ['cosine_tc', 'report_size', 'branch_size', 'files_touched_by_pr', 'developer_normalised_lag']
+    stopwords = utils_.GitMineUtils.STOPWORDS \
+                + list(set(java_reserved + c_reserved + cpp_reserved + javascript_reserved + python_reserved))
+    threshold = .5
+    with open(sys.argv[1]) as f:
+        repo = jsonpickle.decode(f.read())
+    train, test, links = cross_split_repo(repo, n_folds)
+    clinker = CommitLinker(feature_config=config, net_size_in_days=31, undersample_multiplicity=10e15,
+                           stopwords=stopwords)
+    results = list()
+    for i in range(n_folds):
+        clinker.fit(train[i])
+        truth = links[i]
+
+        final_suggestions = dict()
+
+        scores = list()
+        for commit in test[i].commits:
+            id_, pred = clinker.predict(commit)
+            pred = [other for other, prob in pred if prob >= threshold]
+            scores.append((id_, pred))
+
+        for id_, pred in scores:
+            for issue in pred:
+                try:
+                    final_suggestions[issue].append(id_)
+                except KeyError:
+                    final_suggestions[issue] = [id_]
+
+        scores = list()
+        for issue in test[i].issues:
+            id_, pred = clinker.predict(issue)
+            pred = [other for other, prob in pred if prob >= threshold]
+            scores.append((id_, pred))
+
+        for id_, pred in scores:
+            for commit in pred:
+                try:
+                    final_suggestions[id_].append(commit)
+                except KeyError:
+                    final_suggestions[id_] = [commit]
+
+        tp = 0
+        fp = 0
+        fn = 0
+        for issue in final_suggestions.keys():
+            try:
+                expected = set(truth[issue])
+            except KeyError:
+                expected = set()
+            predictions = set(final_suggestions[issue])
+            tp += len(expected.intersection(predictions))
+            fp += len(predictions.difference(expected))
+            fn += len(expected.difference(predictions))
+
+        for issue in truth.keys():
+            if issue not in final_suggestions.keys():
+                fn += len(truth[issue])
+
+        p = tp / (tp + fp) if (tp + fp) > 0 else .0
+        r = tp / (tp + fn) if (tp + fn) > 0 else .0
+        f1 = 2*p*r/(p+r) if (p+r) > 0 else .0
+        results.append([i, tp, fp, fn, p, r, f1])
+    with open(sys.argv[1][:-5]+'_results.txt', 'w') as f:
+        f.write(str(results))

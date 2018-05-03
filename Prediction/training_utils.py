@@ -204,7 +204,7 @@ def generate_commit_issue_interest_pairs(commit_, issue_list, net_size_in_days):
     author = commit_.author
     considered = [i for i in issue_list
                   if (min([abs(entity.timestamp - commit_.timestamp)
-                           if entity.timestamp
+                           if hasattr(entity, 'timestamp') and entity.timestamp
                            else timedelta(days=net_size_in_days, seconds=1)
                            for entity in
                            [i.original_post]

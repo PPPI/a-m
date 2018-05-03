@@ -381,21 +381,11 @@ class FeatureGenerator(object):
             try:
                 lag = min([abs(entity.timestamp - commit.timestamp)
                            if entity.timestamp and commit.timestamp
-                           else timedelta(seconds=self.fingerprint['AVG'])
+                           else timedelta(days=self.net_size_in_days, seconds=1)
                            for entity in [issue_.original_post]
                            + [reply for reply in issue_.replies if reply.author == author]
                            + [state for state in issue_.states if state.to_ == IssueStates.closed]]).total_seconds()
-                # Scale lag on a per developer basis
-                try:
-                    lag /= self.fingerprint[author] if self.fingerprint[author] > .0 else self.fingerprint['AVG']
-                except KeyError:
-                    lag /= self.fingerprint['AVG']
-                # And centre around 0
-                lag -= 1
             except ValueError:
-                lag = .0
-
-            if math.isnan(lag):
                 lag = .0
 
             # Also absolute lag as a sanity check
@@ -403,7 +393,7 @@ class FeatureGenerator(object):
                 lag_close = min([abs(entity.timestamp - commit.timestamp)
                                  for entity in
                                  [state for state in issue_.states if state.to_ == IssueStates.closed]]).total_seconds()
-            except (ValueError, IndexError):
+            except (ValueError, IndexError, TypeError):
                 lag_close = timedelta(days=self.net_size_in_days, seconds=1).total_seconds()
 
             try:
