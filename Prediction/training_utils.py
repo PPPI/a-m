@@ -25,6 +25,9 @@ null_issue.commits = set()
 null_pr = PullRequest(number='null_pr', title='', assignee='', comments=list(), commits=list(), diffs=list(),
                       from_branch='', to_branch='', from_repo='', labels=list(), state=IssueStates.open, to_repo='')
 
+null_commit = Commit(parent='', author=None, title='', desc='', branches=list(), repository='', c_hash='null_commit',
+                      diff=list(), timestamp=None)
+
 
 # The property that the first element of the tuple has is '.timestamp'
 def flatten_events(repo_: Repository) \
@@ -160,10 +163,10 @@ def generate_dev_fingerprint(repo_: Repository):
                         break
         if pr_td:
             avg = float(np.mean(pr_td))
-            dev_tick_rate[dev] = avg if not(math.isnan(avg)) else 1.0
+            dev_tick_rate[dev] = avg if not (math.isnan(avg)) else 1.0
             average_joe.append(dev_tick_rate[dev])
     avg = float(np.mean(average_joe))
-    dev_tick_rate['AVG'] = avg if not(math.isnan(avg)) else 1.0
+    dev_tick_rate['AVG'] = avg if not (math.isnan(avg)) else 1.0
     return dev_tick_rate
 
 
@@ -197,8 +200,32 @@ def generate_pr_issue_interest_pairs(pr_, issue_list, truth_, net_size_in_days):
     return zip(considered, [pr_] * len(considered), link_data)
 
 
+def generate_commit_issue_interest_pairs(commit_, issue_list, net_size_in_days):
+    author = commit_.author
+    considered = [i for i in issue_list
+                  if (min([abs(entity.timestamp - commit_.timestamp)
+                           if entity.timestamp
+                           else timedelta(days=net_size_in_days, seconds=1)
+                           for entity in
+                           [i.original_post]
+                           + [r for r in i.replies if r.author == author]
+                           + i.states
+                           + i.actions]) <= timedelta(days=net_size_in_days))]
+    link_data = list()
+    for issue_ in considered:
+        try:
+            link_data.append(any([commit_.c_hash.startswith(c) for c in issue_.commits]))
+        except KeyError:
+            link_data.append(False)
+    return zip(considered, [commit_] * len(considered), link_data)
+
+
 def generate_pi_wrapper(args):
     return generate_pr_issue_interest_pairs(*args)
+
+
+def generate_ci_wrapper(args):
+    return generate_commit_issue_interest_pairs(*args)
 
 
 class Feature_Closure(object):
@@ -207,6 +234,14 @@ class Feature_Closure(object):
 
     def __call__(self, args):
         return self.feature_generator.generate_features(*args)
+
+
+class Feature_Closure_Commit(object):
+    def __init__(self, feature_generator):
+        self.feature_generator = feature_generator
+
+    def __call__(self, args):
+        return self.feature_generator.generate_features_commit(*args)
 
 
 def generate_training_data(training_repo_: Repository,
@@ -246,6 +281,41 @@ def generate_training_data(training_repo_: Repository,
     return training_data_
 
 
+def generate_training_data_commit(training_repo_: Repository,
+                                  feature_generator,
+                                  net_size_in_days,
+                                  mult_) -> List[Dict[str, Any]]:
+    with Pool(processes=multiprocessing.cpu_count() - 1) as wp:
+        arg_list = list()
+        for v in wp.imap_unordered(generate_ci_wrapper,
+                                   zip(training_repo_.commits, len(training_repo_.commits) * [training_repo_.issues],
+                                       len(training_repo_.commits) * [net_size_in_days]),
+                                   chunksize=128):
+            for i, c, linked in v:
+                arg_list.append((i, c, linked))
+
+        # Explicitly add no_link to the training data
+        issue_map = {i[0]: any([t[-1] for t in arg_list]) for i in arg_list}
+        commit_map = {i[1]: any([t[-1] for t in arg_list]) for i in arg_list}
+        for issue, any_link in issue_map.items():
+            if not any_link:
+                arg_list.append((issue, null_commit, True))
+            else:
+                arg_list.append((issue, null_commit, False))
+        for pr, any_link in commit_map.items():
+            if not any_link:
+                arg_list.append((null_issue, pr, True))
+            else:
+                arg_list.append((null_issue, pr, False))
+
+        arg_list = undersample_naively(mult_, arg_list)
+
+        training_data_ = list()
+        for point in wp.imap_unordered(Feature_Closure_Commit(feature_generator), arg_list, chunksize=128):
+            training_data_.append(point)
+    return training_data_
+
+
 def generate_training_data_seq(training_repo_: Repository,
                                feature_generator,
                                net_size_in_days,
@@ -275,21 +345,21 @@ def generate_training_data_seq(training_repo_: Repository,
     return training_data_
 
 
-def train_classifier(training_data_: List[Dict[str, Any]], perform_feature_selection: bool=False) \
+def train_classifier(training_data_: List[Dict[str, Any]], perform_feature_selection: bool = False) \
         -> MondrianForestClassifier:
     X = list()
     y = list()
     for point in training_data_:
-        X.append(tuple([v for k, v in point.items() if k not in ['linked', 'issue', 'pr']]))
+        X.append(tuple([v for k, v in point.items() if k not in ['linked', 'issue', 'pr', 'commit']]))
         y.append(1 if point['linked'] else -1)
     if perform_feature_selection:
         clf_ = Pipeline([
-          ('feature_selection', SelectFromModel(RFE(
-              RandomForestClassifier(n_estimators=128, class_weight='balanced_subsample'), 5, step=1))),
-          ('classification', MondrianForestClassifier(n_estimators=50,))
+            ('feature_selection', SelectFromModel(RFE(
+                RandomForestClassifier(n_estimators=128, class_weight='balanced_subsample'), 5, step=1))),
+            ('classification', MondrianForestClassifier(n_estimators=50, ))
         ])
     else:
-        clf_ = MondrianForestClassifier(n_estimators=50,)
+        clf_ = MondrianForestClassifier(n_estimators=50, )
     clf_.partial_fit(X, y)
     return clf_
 
@@ -306,6 +376,34 @@ def generate_tfidf(repository: Repository, stopwords_: Set[str], min_len, cache=
             text = text_pipeline(pr, stopwords_, min_len)
             texts.append(text)
             cache[pr.number] = text
+    for issue_ in repository.issues:
+        if issue_.id_ in cache.keys():
+            texts.append(cache[issue_.id_])
+        else:
+            text = text_pipeline(issue_, stopwords_, min_len)
+            texts.append(text)
+            cache[issue_.id_] = text
+
+    dictionary_ = Dictionary(texts)
+    dictionary_.filter_extremes(no_below=3, no_above=0.95)
+    working_corpus = [dictionary_.doc2bow(text, return_missing=True) for text in texts]
+    # Convert UNK from explicit dictionary to UNK token (id = -1)
+    working_corpus = [val[0] + [(-1, sum(val[1].values()))] for val in working_corpus]
+    return tfidfmodel.TfidfModel(working_corpus, id2word=dictionary_), dictionary_, cache
+
+
+def generate_tfidf_commit(repository: Repository, stopwords_: Set[str], min_len, cache=None) -> Tuple[tfidfmodel.TfidfModel, Dictionary, Dict]:
+    if cache is None:
+        cache = dict()
+
+    texts = list()
+    for commit in repository.commits:
+        if commit.c_hash in cache.keys():
+            texts.append(cache[commit.c_hash])
+        else:
+            text = text_pipeline(commit, stopwords_, min_len)
+            texts.append(text)
+            cache[commit.c_hash] = text
     for issue_ in repository.issues:
         if issue_.id_ in cache.keys():
             texts.append(cache[issue_.id_])

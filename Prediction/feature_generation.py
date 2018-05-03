@@ -380,7 +380,7 @@ class FeatureGenerator(object):
         if self.use_temporal:
             try:
                 lag = min([abs(entity.timestamp - commit.timestamp)
-                           if entity.timestamp
+                           if entity.timestamp and commit.timestamp
                            else timedelta(seconds=self.fingerprint['AVG'])
                            for entity in [issue_.original_post]
                            + [reply for reply in issue_.replies if reply.author == author]
