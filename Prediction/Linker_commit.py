@@ -2,18 +2,19 @@ import sys
 
 import jsonpickle
 import numpy as np
+import pandas as pd
 import os
 from datetime import timedelta
 from multiprocessing.pool import Pool
 
 from Prediction.Linker import Linker
 from Prediction.feature_generation import FeatureGenerator
-from Prediction.training_utils import generate_dev_fingerprint, train_classifier, \
+from Prediction.training_utils import train_classifier, \
     generate_training_data_commit, generate_tfidf_commit, null_issue, null_commit
 from Util import utils_
 from Util.CrossValidationSplits import cross_split_repo
 from Util.ReservedKeywords import java_reserved, c_reserved, cpp_reserved, javascript_reserved, python_reserved
-from gitMine.VCClasses import Commit, Issue
+from gitMine.VCClasses import Commit, Issue, IssueStates
 
 
 class Issue_Closure(object):
@@ -210,29 +211,35 @@ class CommitLinker(Linker):
 
 
 if __name__ == '__main__':
-    n_folds = 5
+    n_folds = 10
     config = {
         'use_issue_only': True,
         'use_pr_only': True,
         'use_temporal': True,
-        'use_sim_cs': True,
+        'use_sim_cs': False,
         'use_sim_j': False,
-        'use_sim_d': False,
+        'use_sim_d': True,
         'use_file': True,
         'use_social': True
     }
-    features = ['cosine_tc', 'report_size', 'branch_size', 'files_touched_by_pr', 'developer_normalised_lag']
+    features = ['dice_tc', 'report_size', 'branch_size', 'files_touched_by_pr', 'developer_normalised_lag']
     stopwords = utils_.GitMineUtils.STOPWORDS \
                 + list(set(java_reserved + c_reserved + cpp_reserved + javascript_reserved + python_reserved))
     threshold = .5
     with open(sys.argv[1]) as f:
         repo = jsonpickle.decode(f.read())
     train, test, links = cross_split_repo(repo, n_folds)
-    clinker = CommitLinker(feature_config=config, net_size_in_days=31, undersample_multiplicity=10e15,
+    clinker = CommitLinker(feature_config=config, net_size_in_days=7, undersample_multiplicity=1,
                            stopwords=stopwords)
-    results = list()
+    results = {'Fold': list(),
+               'True Positives': list(),
+               'False Positives': list(),
+               'False Negatives': list(),
+               'Precision': list(),
+               'Recall': list(),
+               'F1': list()}
     for i in range(n_folds):
-        clinker.fit(train[i])
+        clinker.fit(train[i], features=features)
         truth = links[i]
 
         final_suggestions = dict()
@@ -282,7 +289,12 @@ if __name__ == '__main__':
 
         p = tp / (tp + fp) if (tp + fp) > 0 else .0
         r = tp / (tp + fn) if (tp + fn) > 0 else .0
-        f1 = 2*p*r/(p+r) if (p+r) > 0 else .0
-        results.append([i, tp, fp, fn, p, r, f1])
-    with open(sys.argv[1][:-5]+'_results.txt', 'w') as f:
-        f.write(str(results))
+        f1 = 2 * p * r / (p + r) if (p + r) > 0 else .0
+        results['Fold'].append(i)
+        results['True Positives'].append(tp)
+        results['False Positives'].append(fp)
+        results['False Negatives'].append(fn)
+        results['Precision'].append(p)
+        results['Recall'].append(r)
+        results['F1'].append(f1)
+    pd.DataFrame(data=results).to_csv(sys.argv[1][:-5] + '_results.csv')

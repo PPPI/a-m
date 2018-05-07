@@ -417,5 +417,5 @@ class FeatureGenerator(object):
             features['existing_links'] = len(issue_.commits)
 
         if self.selected:
-            features = {k: v for k, v in features.items() if k in ['pr', 'issue', 'linked'] + self.selected}
+            features = {k: v for k, v in features.items() if k in ['commit', 'issue', 'linked'] + self.selected}
         return features
