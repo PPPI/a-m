@@ -27,6 +27,7 @@ def process_prediction_request(msg):
             suggestions = local_server.predict_pr(repo, pr_id)
         elif issue_id:
             suggestions = local_server.predict_issue(repo, issue_id)
+        suggestions = [(i, t, p) for i, t, p in suggestions if p > 0.0]
         if len(suggestions) > 0:
             out_msg = '{"Suggestions": %s, "Error": ""}' \
                       % json.dumps([{'Id': p[0], 'Title': p[1], 'Probability': float('%1.2f' % p[2]),
