@@ -199,8 +199,8 @@ class Linker(object):
             prediction_object.comments = prediction_object.comments[:1]
             open_issues = [i for i in self.repository_obj.issues
                            if
-                           # (len(i.states) == 0 or i.states[-1].to_ == IssueStates.open)
-                           # or
+                           (len(i.states) == 0 or i.states[-1].to_ == IssueStates.open)
+                           or
                            (min([abs(entity.timestamp - prediction_object.comments[0].timestamp)
                                  if entity.timestamp and prediction_object.comments
                                  else timedelta(days=self.net_size_in_days, seconds=1)
@@ -675,7 +675,7 @@ if __name__ == '__main__':
         with open(project_dir) as f:
             repo = jsonpickle.decode(f.read())
 
-        with open(project_dir[:-len('.json')] + '_truth.json') as f:
+        with open(project_dir[:-len('.json')] + '_n_truth.json') as f:
             truth = jsonpickle.decode(f.read())
 
         batches = generate_batches(repo, n_batches)
@@ -692,10 +692,10 @@ if __name__ == '__main__':
             scores_p = dict([(id_, pred) for id_, pred in scores if id_ in pr_numbers])
             scores_i = dict([(id_, pred) for id_, pred in scores if id_ in issue_ids])
 
-            with open(project_dir[:-5] + ('_results_p_f%d_selected_features_MF_restricted_p.txt' % i), 'w') as f:
+            with open(project_dir[:-5] + ('_results_p_f%d_selected_features_MF_restricted_n.txt' % i), 'w') as f:
                 f.write(str(scores_p))
-            with open(project_dir[:-5] + ('_results_i_f%d_selected_features_MF_restricted_p.txt' % i), 'w') as f:
+            with open(project_dir[:-5] + ('_results_i_f%d_selected_features_MF_restricted_n.txt' % i), 'w') as f:
                 f.write(str(scores_i))
 
-            with open(project_dir[:-5] + ('_unk_rate_f%d_selected_features_MF_restricted_p.txt' % i), 'w') as f:
+            with open(project_dir[:-5] + ('_unk_rate_f%d_selected_features_MF_restricted_n.txt' % i), 'w') as f:
                 f.write(str(unk_rate))
