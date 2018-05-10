@@ -113,13 +113,13 @@ if __name__ == '__main__':
         'ReactiveX_RxJava',
         # 'google_guava',
         # 'facebook_react',
-        'palantir_plottable',
+        # 'palantir_plottable',
         # 'tensorflow_tensorflow', # Dev set end
     ]
     for project in projects:
         results_i = list()
         for fold in [n_fold - 1]:
-            with open((location_format[:-5] + '_results_i_f%d_selected_features_MF_restricted_p.txt') % (project, fold)) as f:
+            with open((location_format[:-5] + '_results_i_f%d_selected_features_MF_restricted_n.txt') % (project, fold)) as f:
                 result_str = f.read()
             result = ast.literal_eval(result_str)
             results_i.append((fold, result))
@@ -127,7 +127,7 @@ if __name__ == '__main__':
 
         results_p = list()
         for fold in [n_fold - 1]:
-            with open((location_format[:-5] + '_results_p_f%d_selected_features_MF_restricted_p.txt') % (project, fold)) as f:
+            with open((location_format[:-5] + '_results_p_f%d_selected_features_MF_restricted_n.txt') % (project, fold)) as f:
                 result_str = f.read()
             result = ast.literal_eval(result_str)
             results_p.append((fold, result))
@@ -163,4 +163,4 @@ if __name__ == '__main__':
                     data['False Positive Rate'].append(fpr)
                     data['False Negative Rate'].append(fnr)
 
-        pd.DataFrame(data=data).to_csv((location_format[:-len('.json')] + '_results_interpreted_MF_restricted_p.csv') % project)
+        pd.DataFrame(data=data).to_csv((location_format[:-len('.json')] + '_results_interpreted_MF_restricted_n.csv') % project)
