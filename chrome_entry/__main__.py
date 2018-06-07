@@ -20,20 +20,22 @@ def process_prediction_request(msg):
     pr_id = msg['PR']
     issue_id = msg['Issue']
     try:
-        out_msg = '{"Suggestions": [], "Error": "Model loaded, running predictions."}'
+        out_msg = '{"Suggestions": [], "Notification": "Model loaded, running predictions."}'
         send_message(out_msg)
         local_server = xmlrpc.client.ServerProxy(SERVER_ADDR, allow_none=True)
         if pr_id:
             suggestions = local_server.predict_pr(repo, pr_id)
         elif issue_id:
             suggestions = local_server.predict_issue(repo, issue_id)
-        suggestions = [(i, t, p) for i, t, p in suggestions if p > 0.0]
+        suggestions = [(i, t, p) for i, t, p in suggestions if float('%1.2f' % p) > 0.00]
         if len(suggestions) > 0:
-            out_msg = '{"Suggestions": %s, "Error": ""}' \
+            out_msg = '{"Suggestions": %s}' \
                       % json.dumps([{'Id': p[0], 'Title': p[1], 'Probability': float('%1.2f' % p[2]),
                                      'Repo': msg['Repository']} for p in suggestions])
         else:
-            out_msg = '{"Suggestions": [], "Error": "No suggestions available"}'
+            out_msg = '{"Suggestions": [], "Notification": "No suggestions available!"}'
+        # with open('debug.txt', 'w') as f:
+        #     f.write(out_msg)
         send_message(out_msg)
     except Exception as e:
         if 'RateLimitExceededException' in str(e):
@@ -51,7 +53,7 @@ def unknown_type(msg):
 def model_update():
     local_server = xmlrpc.client.ServerProxy(SERVER_ADDR, allow_none=True)
     local_server.trigger_model_updates()
-    out_msg = '{"Suggestions": [], "Error": "Updated model, please close and reopen plugin pop-up to use!"}'
+    out_msg = '{"Suggestions": [], "Notification": "Updated model!"}'
     send_message(out_msg)
 
 
@@ -60,7 +62,7 @@ def record_links(msg):
     local_server = xmlrpc.client.ServerProxy(SERVER_ADDR, allow_none=True)
     for issue_id, pr_id in json.loads(msg['Links']):
         local_server.record_link(repo, issue_id, pr_id)
-    out_msg = '{"Suggestions": [], "Error": "Links recorded, please close and reopen plugin pop-up to use!"}'
+    out_msg = '{"Suggestions": [], "Notification": "Links recorded succesfully!"}'
     send_message(out_msg)
 
 
