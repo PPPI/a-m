@@ -124,49 +124,57 @@ if __name__ == '__main__':
         projects = [line.strip() for line in f.readlines()]
 
     for project in projects:
+        exists = False
         try:
-            results_i = list()
-            for fold in [4]:
-                with open((location_format[
-                           :-5] + '_RAW_i_results_f4_ioTrue_poTrue_tTrue_csTrue_jFalse_fFalse_sFalse_u1.txt') % project) as f:
-                    result_str = f.read()
-                result = ast.literal_eval(result_str)
-                results_i.append((fold, result))
-            results_i = dict(results_i)
+            with open((location_format[:-len('.json')] + '_results_interpreted_commits_MF_restricted.csv') % project) as f:
+                exists =len(f.read()) > 0
+        except FileNotFoundError:
+            pass
 
-            results_p = list()
-            for fold in [4]:
-                with open((location_format[
-                           :-5] + '_RAW_p_results_f4_ioTrue_poTrue_tTrue_csTrue_jFalse_fFalse_sFalse_u1.txt') % project) as f:
-                    result_str = f.read()
-                result = ast.literal_eval(result_str)
-                results_p.append((fold, result))
-            results_p = dict(results_p)
+        if not(exists):
+            try:
+                results_i = list()
+                for fold in [4]:
+                    with open((location_format[
+                               :-5] + '_RAW_i_results_f4_ioTrue_poTrue_tTrue_csTrue_jFalse_fFalse_sFalse_u1.txt') % project) as f:
+                        result_str = f.read()
+                    result = ast.literal_eval(result_str)
+                    results_i.append((fold, result))
+                results_i = dict(results_i)
 
-            with open(location_format % project) as f:
-                repo = jsonpickle.decode(f.read())
+                results_p = list()
+                for fold in [4]:
+                    with open((location_format[
+                               :-5] + '_RAW_p_results_f4_ioTrue_poTrue_tTrue_csTrue_jFalse_fFalse_sFalse_u1.txt') % project) as f:
+                        result_str = f.read()
+                    result = ast.literal_eval(result_str)
+                    results_p.append((fold, result))
+                results_p = dict(results_p)
 
-            data = {'Threshold': list(), 'K': list(), 'Hit-rate': list(), 'Average Precision': list(),
-                    'Mean Reciprocal Rank': list(), 'Discounted Cumulative Gain': list(),
-                    'False Positive Rate': list(), 'False Negative Rate': list()}
-            for fold in [4]:
-                result_p = results_p[fold]
-                result_i = results_i[fold]
-                for th in np.arange(.0, 1., step=.01):
-                    for top_k in [1, 3, 5, 7, 10, 15, 20, 'inf']:
-                        hit, ap, mrr, dcg, fpr, fnr = evaluate_at_threshold(result_p, result_i, th, top_k, repo)
+                with open(location_format % project) as f:
+                    repo = jsonpickle.decode(f.read())
 
-                        data['Threshold'].append(float('%.5f' % th))
-                        data['K'].append(top_k)
-                        data['Hit-rate'].append(hit)
-                        data['Average Precision'].append(ap)
-                        data['Mean Reciprocal Rank'].append(mrr)
-                        data['Discounted Cumulative Gain'].append(dcg)
-                        data['False Positive Rate'].append(fpr)
-                        data['False Negative Rate'].append(fnr)
+                data = {'Threshold': list(), 'K': list(), 'Hit-rate': list(), 'Average Precision': list(),
+                        'Mean Reciprocal Rank': list(), 'Discounted Cumulative Gain': list(),
+                        'False Positive Rate': list(), 'False Negative Rate': list()}
+                for fold in [4]:
+                    result_p = results_p[fold]
+                    result_i = results_i[fold]
+                    for th in np.arange(.0, 1., step=.01):
+                        for top_k in [1, 3, 5, 7, 10, 15, 20, 'inf']:
+                            hit, ap, mrr, dcg, fpr, fnr = evaluate_at_threshold(result_p, result_i, th, top_k, repo)
 
-            pd.DataFrame(data=data).to_csv(
-                (location_format[:-len('.json')] + '_results_interpreted_commits_MF_restricted.csv') % project)
-        except Exception as e:
-            print('%s' % project)
-            print(str(e))
+                            data['Threshold'].append(float('%.5f' % th))
+                            data['K'].append(top_k)
+                            data['Hit-rate'].append(hit)
+                            data['Average Precision'].append(ap)
+                            data['Mean Reciprocal Rank'].append(mrr)
+                            data['Discounted Cumulative Gain'].append(dcg)
+                            data['False Positive Rate'].append(fpr)
+                            data['False Negative Rate'].append(fnr)
+
+                pd.DataFrame(data=data).to_csv(
+                    (location_format[:-len('.json')] + '_results_interpreted_commits_MF_restricted.csv') % project)
+            except Exception as e:
+                print('%s' % project)
+                print(str(e))
