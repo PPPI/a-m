@@ -23,7 +23,6 @@ def main():
     class RequestHandler(SimpleXMLRPCRequestHandler):
         rpc_paths = ('/RPC2',)
 
-
     # Create server
     with SimpleXMLRPCServer(("localhost", 8000), requestHandler=RequestHandler, allow_none=True) as server:
         with open(os.path.join(os.curdir, 'config.json')) as f:

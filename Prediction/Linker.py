@@ -433,7 +433,7 @@ class Linker(object):
                 issue_numbers = extract_issue_numbers(all_text)
                 issue_numbers = list(filter(lambda id_: ('issue_' + id_[1:]) in pr_numbers, issue_numbers))
                 for pr_id in issue_numbers:
-                    self.update_truth((issue.id_[len('issue_'):], pr_id))
+                    self.update_truth((issue.id_[len('issue_'):], pr_id[1:]))
             except TypeError:
                 pass
 

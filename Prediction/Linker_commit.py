@@ -216,13 +216,13 @@ if __name__ == '__main__':
         'use_issue_only': True,
         'use_pr_only': True,
         'use_temporal': True,
-        'use_sim_cs': False,
+        'use_sim_cs': True,
         'use_sim_j': False,
-        'use_sim_d': True,
+        'use_sim_d': False,
         'use_file': True,
         'use_social': True
     }
-    features = ['dice_tc', 'report_size', 'branch_size', 'files_touched_by_pr', 'developer_normalised_lag']
+    features = None
     stopwords = utils_.GitMineUtils.STOPWORDS \
                 + list(set(java_reserved + c_reserved + cpp_reserved + javascript_reserved + python_reserved))
     threshold = .5
