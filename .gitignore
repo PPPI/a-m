@@ -9,3 +9,10 @@
 **/.ipynb_checkpoints/*
 /backend/models
 /backend/models/*
+/build
+/build/*
+/dist
+/dist/*
+/*.egg-info
+/*.egg-info/*
+*.ipynb
