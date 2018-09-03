@@ -143,6 +143,7 @@ class Linker(object):
         self.use_file = feature_config['use_file']
         self.use_pr_only = feature_config['use_pr_only']
         self.use_issue_only = feature_config['use_issue_only']
+        self.flip_probability = 0.33
         if self.use_sim_cs or self.use_sim_j or self.use_sim_d or self.use_file:
             assert self.predictions_between_updates is not None
             assert self.min_tok_len is not None
@@ -189,7 +190,8 @@ class Linker(object):
                                                            self.feature_generator,
                                                            self.net_size_in_days,
                                                            truth,
-                                                           self.undersample_multiplicity))
+                                                           self.undersample_multiplicity,
+                                                           flip_prob=self.flip_probability))
 
     def predict(self, prediction_object):
         threshold = self.prediction_threshold

@@ -33,7 +33,7 @@ def main(args):
     # features = ['dice', 'report_size', 'branch_size', 'files_touched_by_pr', 'developer_normalised_lag']
     features = None
     print('Loaded repository %s' % repo.name)
-    linker = Linker(net_size_in_days=31, min_tok_len=2, undersample_multiplicity=1e20, feature_config=config,
+    linker = Linker(net_size_in_days=31, min_tok_len=2, undersample_multiplicity=100, feature_config=config,
                     predictions_between_updates=1000, stopwords=stopwords)
     linker.fit(repo, truth, features=features)
     print('Trained Random Forest classifier')

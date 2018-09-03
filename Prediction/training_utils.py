@@ -1,19 +1,18 @@
 import math
+import multiprocessing
+import random
+from datetime import datetime, timedelta
 from multiprocessing.pool import Pool
 from random import shuffle
-
-import multiprocessing
-import numpy as np
-
-from datetime import datetime, timedelta
 from typing import List, Tuple, Union, Set, Dict, Any
 
+import numpy as np
 from gensim.corpora import Dictionary
 from gensim.models import tfidfmodel
+from skgarden import MondrianForestClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_selection import SelectFromModel, RFE
 from sklearn.pipeline import Pipeline
-from skgarden import MondrianForestClassifier
 
 from Prediction.text_utils import text_pipeline
 from gitMine.VCClasses import Repository, Commit, Comment, StateChange, Reference, Issue, PullRequest, IssueStates
@@ -26,7 +25,7 @@ null_pr = PullRequest(number='null_pr', title='', assignee='', comments=list(), 
                       from_branch='', to_branch='', from_repo='', labels=list(), state=IssueStates.open, to_repo='')
 
 null_commit = Commit(parent='', author=None, title='', desc='', branches=list(), repository='', c_hash='null_commit',
-                      diff=list(), timestamp=None)
+                     diff=list(), timestamp=None)
 
 
 # The property that the first element of the tuple has is '.timestamp'
@@ -248,7 +247,8 @@ def generate_training_data(training_repo_: Repository,
                            feature_generator,
                            net_size_in_days,
                            truth_,
-                           mult_) -> List[Dict[str, Any]]:
+                           mult_,
+                           flip_prob=0.33) -> List[Dict[str, Any]]:
     with Pool(processes=multiprocessing.cpu_count() - 1) as wp:
         arg_list = list()
         for v in wp.imap_unordered(generate_pi_wrapper,
@@ -263,15 +263,23 @@ def generate_training_data(training_repo_: Repository,
         issue_map = {i[0]: any([t[-1] for t in arg_list]) for i in arg_list}
         pr_map = {i[1]: any([t[-1] for t in arg_list]) for i in arg_list}
         for issue, any_link in issue_map.items():
-            if not any_link:
-                arg_list.append((issue, null_pr, True))
+            if random.random() >= flip_prob:
+                T = False
             else:
-                arg_list.append((issue, null_pr, False))
+                T = True
+            if not any_link:
+                arg_list.append((issue, null_pr, T))
+            else:
+                arg_list.append((issue, null_pr, not T))
         for pr, any_link in pr_map.items():
-            if not any_link:
-                arg_list.append((null_issue, pr, True))
+            if random.random() >= flip_prob:
+                T = False
             else:
-                arg_list.append((null_issue, pr, False))
+                T = True
+            if not any_link:
+                arg_list.append((null_issue, pr, T))
+            else:
+                arg_list.append((null_issue, pr, not T))
 
         arg_list = undersample_naively(mult_, arg_list)
 
@@ -364,7 +372,8 @@ def train_classifier(training_data_: List[Dict[str, Any]], perform_feature_selec
     return clf_
 
 
-def generate_tfidf(repository: Repository, stopwords_: Set[str], min_len, cache=None) -> Tuple[tfidfmodel.TfidfModel, Dictionary, Dict]:
+def generate_tfidf(repository: Repository, stopwords_: Set[str], min_len, cache=None) -> Tuple[
+    tfidfmodel.TfidfModel, Dictionary, Dict]:
     if cache is None:
         cache = dict()
 
@@ -392,7 +401,8 @@ def generate_tfidf(repository: Repository, stopwords_: Set[str], min_len, cache=
     return tfidfmodel.TfidfModel(working_corpus, id2word=dictionary_), dictionary_, cache
 
 
-def generate_tfidf_commit(repository: Repository, stopwords_: Set[str], min_len, cache=None) -> Tuple[tfidfmodel.TfidfModel, Dictionary, Dict]:
+def generate_tfidf_commit(repository: Repository, stopwords_: Set[str], min_len, cache=None) -> Tuple[
+    tfidfmodel.TfidfModel, Dictionary, Dict]:
     if cache is None:
         cache = dict()
 
