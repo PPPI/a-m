@@ -510,10 +510,13 @@ class Linker(object):
         predictions = list()
 
         for issue_id, pr_ids in self.truth.items():
-            issue = [i for i in self.repository_obj.issues if i.id_ == 'issue_' + issue_id[1:]][0]
-            for pr_id in pr_ids:
-                pr = [p for p in self.repository_obj.prs if p.number == 'issue_' + pr_id[1:]][0]
-                prediction_data.append(self.feature_generator.generate_features(issue, pr, True))
+            try:
+                issue = [i for i in self.repository_obj.issues if i.id_ == 'issue_' + issue_id[1:]][0]
+                for pr_id in pr_ids:
+                    pr = [p for p in self.repository_obj.prs if p.number == 'issue_' + pr_id[1:]][0]
+                    prediction_data.append(self.feature_generator.generate_features(issue, pr, True))
+            except IndexError:
+                pass
 
         for point in prediction_data:
             probabilities = self.clf.predict_proba(np.array(tuple([v for k, v in point.items()
