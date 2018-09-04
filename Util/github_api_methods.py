@@ -128,3 +128,5 @@ if __name__ == '__main__':
     issue_ref = repo_ref.get_issue(2509)
     issue = parse_issue_ref(issue_ref)
     print(issue)
+    pr_refs = [ref for ref in repo_ref.get_pulls(state='all')]
+    print(pr_refs)
