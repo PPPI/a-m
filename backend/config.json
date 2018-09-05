@@ -1,5 +1,5 @@
 {
-  "locations" : ["./models/google_guava"],
+  "locations" : ["./models/_google_guava"],
   "git_locations" : ["D:\\guava"],
-  "max_age_to_keep" : 183
+  "max_age_to_keep" : 730
 }

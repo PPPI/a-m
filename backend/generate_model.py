@@ -19,6 +19,7 @@ def main(args):
         repo = jsonpickle.decode(f.read())
     with open(filename[:-len('.json')] + '_truth.json') as f:
         truth = jsonpickle.decode(f.read())
+    repo.name = '/' + repo.name if '/' != repo.name[0] else repo.name
 
     config = {
         'use_issue_only': True,
