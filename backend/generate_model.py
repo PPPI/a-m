@@ -19,6 +19,7 @@ def main(args):
         repo = jsonpickle.decode(f.read())
     with open(filename[:-len('.json')] + '_truth.json') as f:
         truth = jsonpickle.decode(f.read())
+
     repo.name = '/' + repo.name if '/' != repo.name[0] else repo.name
 
     config = {
@@ -34,8 +35,8 @@ def main(args):
     # features = ['dice', 'report_size', 'branch_size', 'files_touched_by_pr', 'developer_normalised_lag']
     features = None
     print('Loaded repository %s' % repo.name)
-    linker = Linker(net_size_in_days=31, min_tok_len=2, undersample_multiplicity=100, feature_config=config,
-                    predictions_between_updates=1000, stopwords=stopwords)
+    linker = Linker(net_size_in_days=42, min_tok_len=3, undersample_multiplicity=10, feature_config=config,
+                    predictions_between_updates=10e20, stopwords=stopwords)
     linker.fit(repo, truth, features=features)
     print('Trained Random Forest classifier')
     out_path = os.path.join(os.getcwd(), 'models', repo.name[1:].translate({ord(c): '_' for c in '\\/'}))
