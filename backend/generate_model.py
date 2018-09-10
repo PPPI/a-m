@@ -26,17 +26,17 @@ def main(args):
         'use_issue_only': True,
         'use_pr_only': True,
         'use_temporal': True,
-        'use_sim_cs': False,
+        'use_sim_cs': True,
         'use_sim_j': False,
-        'use_sim_d': True,
+        'use_sim_d': False,
         'use_file': True,
         'use_social': True
     }
     # features = ['dice', 'report_size', 'branch_size', 'files_touched_by_pr', 'developer_normalised_lag']
     features = None
     print('Loaded repository %s' % repo.name)
-    linker = Linker(net_size_in_days=42, min_tok_len=3, undersample_multiplicity=10, feature_config=config,
-                    predictions_between_updates=10e20, stopwords=stopwords)
+    linker = Linker(net_size_in_days=42, min_tok_len=3, undersample_multiplicity=50, feature_config=config,
+                    predictions_between_updates=1000, stopwords=stopwords)
     linker.fit(repo, truth, features=features)
     print('Trained Random Forest classifier')
     out_path = os.path.join(os.getcwd(), 'models', repo.name[1:].translate({ord(c): '_' for c in '\\/'}))
