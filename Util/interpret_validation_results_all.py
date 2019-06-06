@@ -32,6 +32,8 @@ def evaluate_at_threshold(result_p, result_i, th, top_k, truth_p, truth_i, subse
     neg_renorm = 0
     sub_hit = 0
     sub_total = 0
+    precision = 0
+    recall = 0
 
     for pr_nr, predictions in result_p_:
         predictions = [p[0] for p in predictions]
@@ -60,6 +62,8 @@ def evaluate_at_threshold(result_p, result_i, th, top_k, truth_p, truth_i, subse
             renorm += 1
             neg_renorm += 1
             hit += any(predictions)
+            precision += any(predictions)
+            recall += any(predictions)
             curr_ap = np.mean([len([val for val in predictions[:(i + 1)] if val is True]) / (i + 1)
                                for i, j in enumerate(predictions) if j is True])
             if not math.isnan(curr_ap):
@@ -106,6 +110,8 @@ def evaluate_at_threshold(result_p, result_i, th, top_k, truth_p, truth_i, subse
             renorm += 1
             neg_renorm += 1
             hit += any(predictions)
+            precision += any(predictions)
+            recall += any(predictions)
             curr_ap = np.mean([len([val for val in predictions[:(i + 1)] if val is True]) / (i + 1)
                                for i, j in enumerate(predictions) if j is True])
             if not math.isnan(curr_ap):
@@ -130,12 +136,14 @@ def evaluate_at_threshold(result_p, result_i, th, top_k, truth_p, truth_i, subse
     ap = ap / renorm if renorm > 0 else ap
     dcg = dcg / renorm if renorm > 0 else dcg
     fpr = fpr / renorm if renorm > 0 else fpr
+    precision = precision / renorm if renorm > 0 else precision
     fnr = fnr / neg_renorm if neg_renorm > 0 else fnr
+    recall = recall / neg_renorm if neg_renorm > 0 else recall
     # hit = hit / renorm if renorm > 0 else hit
     hit /= (len(result_i_) + len(result_p_))
     sub_hit = sub_hit / sub_total if sub_total > 0 else sub_hit
 
-    return hit, ap, mrr, dcg, fpr, fnr, sub_hit
+    return hit, ap, mrr, dcg, fpr, fnr, sub_hit, precision, recall
 
 
 if __name__ == '__main__':
@@ -203,13 +211,13 @@ if __name__ == '__main__':
                 data = {'Threshold': list(), 'K': list(), 'Hit-rate': list(), 'Average Precision': list(),
                         'Mean Reciprocal Rank': list(), 'Discounted Cumulative Gain': list(),
                         'False Positive Rate': list(), 'False Negative Rate': list(),
-                        'Subsequent Links Found': list()}
+                        'Subsequent Links Found': list(), 'Precision': list(), 'Recall': list()}
                 for fold in [4]:
                     result_p = results_p[fold]
                     result_i = results_i[fold]
                     for th in np.arange(.0, 1., step=.01):
                         for top_k in [1, 3, 5, 7, 10, 15, 20, 'inf']:
-                            hit, ap, mrr, dcg, fpr, fnr, sub_hit = evaluate_at_threshold(result_p, result_i, th, top_k,
+                            hit, ap, mrr, dcg, fpr, fnr, sub_hit, p, r = evaluate_at_threshold(result_p, result_i, th, top_k,
                                                                                          truth_pr, truth,
                                                                                          subseq_i=subseq_i,
                                                                                          subseq_p=subseq_p)
@@ -223,7 +231,10 @@ if __name__ == '__main__':
                             data['False Positive Rate'].append(fpr)
                             data['False Negative Rate'].append(fnr)
                             data['Subsequent Links Found'].append(sub_hit)
-
+                            data['Precision'].append(p)
+                            data['Recall'].append(r)
+                print('Writing %s' %
+                      ((location_format[:-len('.json')] + '_results_interpreted_MF_restricted.csv') % project))
                 pd.DataFrame(data=data).to_csv(
                     (location_format[:-len('.json')] + '_results_interpreted_MF_restricted.csv') % project)
             except Exception as e:
