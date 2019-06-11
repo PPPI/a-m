@@ -42,15 +42,15 @@ if __name__ == '__main__':
                 with open(project_dir) as f:
                     repo = jsonpickle.decode(f.read())
 
-                with open(os.path.join(os.path.dirname(project_dir[:-5]), '..', 'tails',
-                                       os.path.basename(project_dir)[:-len('.json')] + '_truth.json')) as f:
-                    truth = jsonpickle.decode(f.read())
-
                 batches = generate_batches(repo, n_batches)
                 for under in [1]:  # [1, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000]:
                     for i in [n_batches - 1]:
                         for keep_rate in np.arange(0.05, 0.95, 0.05):
                             keep_rate = float('%2.3f' % keep_rate)
+                            with open(os.path.join(os.path.dirname(project_dir[:-5]),
+                                                   os.path.basename(project_dir)[
+                                                   :-len('.json')] + '_r_%2.3f_truth.json' % keep_rate)) as f:
+                                truth = jsonpickle.decode(f.read())
                             linker = Linker(net_size_in_days=7, min_tok_len=2, undersample_multiplicity=10e15,
                                             stopwords=stopwords, feature_config=config,
                                             predictions_between_updates=10e15)
