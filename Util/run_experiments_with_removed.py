@@ -46,10 +46,10 @@ if __name__ == '__main__':
                 for under in [1]:  # [1, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000]:
                     for i in [n_batches - 1]:
                         for keep_rate in np.arange(0.05, 0.95, 0.05):
-                            keep_rate = float('%2.3f' % keep_rate)
+                            keep_rate = float('%2.2f' % keep_rate)
                             with open(os.path.join(os.path.dirname(project_dir[:-5]),
                                                    os.path.basename(project_dir)[
-                                                   :-len('.json')] + '_r_%2.3f_truth.json' % keep_rate)) as f:
+                                                   :-len('.json')] + '_r_%2.2f_truth.json' % keep_rate)) as f:
                                 truth = jsonpickle.decode(f.read())
                             linker = Linker(net_size_in_days=7, min_tok_len=2, undersample_multiplicity=10e15,
                                             stopwords=stopwords, feature_config=config,
@@ -65,19 +65,19 @@ if __name__ == '__main__':
                             scores_i = dict([(id_, pred) for id_, pred in scores if id_ in issue_ids])
 
                             with open(project_dir[:-5] + (
-                                    '_RAW_p_results_f%d_io%s_po%s_t%s_cs%s_j%s_f%s_s%s_u%d_r%2.3f.txt' %
+                                    '_RAW_p_results_f%d_io%s_po%s_t%s_cs%s_j%s_f%s_s%s_u%d_r%2.2f.txt' %
                                     (i, use_issue_only, use_pr_only, use_temporal, use_sim_cs,
                                      use_sim_j, use_file, use_social, under, keep_rate)), 'w') as f:
                                 f.write(str(scores_p))
 
                             with open(project_dir[:-5] + (
-                                    '_RAW_i_results_f%d_io%s_po%s_t%s_cs%s_j%s_f%s_s%s_u%d_r%2.3f.txt' %
+                                    '_RAW_i_results_f%d_io%s_po%s_t%s_cs%s_j%s_f%s_s%s_u%d_r%2.2f.txt' %
                                     (i, use_issue_only, use_pr_only, use_temporal, use_sim_cs,
                                      use_sim_j, use_file, use_social, under, keep_rate)), 'w') as f:
                                 f.write(str(scores_i))
 
                             with open(project_dir[:-5] + (
-                                    '_RAW_unk_rate_f%d_io%s_po%s_t%s_cs%s_j%s_f%s_s%s_u%d_r%2.3f.txt' %
+                                    '_RAW_unk_rate_f%d_io%s_po%s_t%s_cs%s_j%s_f%s_s%s_u%d_r%2.2f.txt' %
                                     (i, use_issue_only, use_pr_only, use_temporal, use_sim_cs,
                                      use_sim_j, use_file, use_social, under, keep_rate)), 'w') as f:
                                 f.write(str(unk_rate))
