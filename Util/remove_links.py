@@ -28,5 +28,5 @@ if __name__ == '__main__':
                     except KeyError:
                         noisy_truth[issue_id] = [pr_nr]
 
-    with open(location[:-5] + '_r_%2.2f_truth.json' % keep_rate, 'w') as f:
-        f.write(jsonpickle.encode(noisy_truth))
+        with open(location[:-5] + '_r_%2.2f_truth.json' % keep_rate, 'w') as f:
+            f.write(jsonpickle.encode(noisy_truth))
