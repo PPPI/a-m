@@ -1,5 +1,8 @@
 # Aide-memoir
-This project represents the backend and model code for A-m. This can be used to train a model used for PR-Issue link prediction as:
+This project represents the backend and model code for A-m. 
+Please use the provided `setup.py` to install the package and dependencies.
+
+This can be used to train a model used for PR-Issue link prediction as:
 ```
 filename = 'data/google_guava.json'
 with open(filename) as f:
@@ -17,7 +20,26 @@ Linker.persist_to_disk(out_path)
 print('Recorded model to disk')
 ```
 
+Or make use of the `generate_models.py` script in `backend`.
+```
+python backend/generate_models.py <path_to_crawled_repository>
+```
+
+To start the backend, edit `config.json` to point to the desired models and local gits and start it with:
+```
+python backend/backend.py
+```
+This should be done before the chrome plug-in may be used.
+
+To use a remote backend, edit the `SERVER_ADDR` variable from `chrome_entry/__main__.py` from:
+```
+SERVER_ADDR = 'http://localhost:8000'
+```
+To the desired server.
+
 The corpora and truth data can be found at and downloaded from: https://1drv.ms/f/s!AnfFX0y_EVFMmoxKP8NchZzn53RcHw
+
+The crawling code is provided in `Prediction/gitScraper.py`.
 
 The backend can be used for replication as a standalone or it can be used together with a chrome plug-in.
 For the latter more details at: https://github.com/PPPI/tlinker-chrome
