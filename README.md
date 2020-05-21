@@ -42,6 +42,6 @@ The corpora and truth data can be found at and downloaded from [here](https://do
 The crawling code is provided in `Prediction/gitScraper.py`.
 
 The backend can be used for replication as a standalone or it can be used together with a chrome plug-in.
-For the latter more details at: https://github.com/PPPI/tlinker-chrome
+For the latter more details at: https://github.com/PPPI/am-chrome
 
-This work was done for the purpose of the following paper: https://github.com/PPPI/tlinker-tex
+This work was done for the purpose of the following paper: https://github.com/PPPI/am-tex
