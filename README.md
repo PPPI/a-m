@@ -37,7 +37,7 @@ SERVER_ADDR = 'http://localhost:8000'
 ```
 To the desired server.
 
-The corpora and truth data can be found at and downloaded from [here](https://doi.org/10.5522/04/11897355)
+The corpora and truth data can be found at and downloaded from [here](https://figshare.com/s/83c448eb518b3d04651f)
 
 The crawling code is provided in `Prediction/gitScraper.py`.
 
