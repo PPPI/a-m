@@ -45,3 +45,17 @@ The backend can be used for replication as a standalone or it can be used togeth
 For the latter more details at: https://github.com/PPPI/am-chrome
 
 This work was done for the purpose of the following paper: https://github.com/PPPI/am-tex
+
+## Dependencies
+This project assumes Python 3.5 or newer.
+
+```
+jsonpickle       # For data storage
+scikit-learn     # For classifier utility functions, recursive-feature elimination etc.
+gensim           # For TF.IDF implementation
+numpy            # For numerical operations
+pygithub         # For interaction with github
+pytz             # To handle timestamps and time data
+pandas           # For results interpretation and output
+scikit-garden    # For Mondrian Forest implementation
+```
