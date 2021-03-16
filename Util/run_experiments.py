@@ -18,7 +18,14 @@ if __name__ == '__main__':
     features = ['cosine_tc', 'report_size', 'branch_size', 'files_touched_by_pr', 'developer_normalised_lag']
     # configs = itertools.product([True, False], repeat=8)
     # configs = [[True]*8]
-    configs = [[True, False, False, False, False, True, True, True]]
+    # configs = [[True, False, False, False, False, True, True, True]]
+    # Configuration to test the impact of our new features
+    configs =[
+        [True, False, False, True, True, True, False, False],
+        [True, False, False, True, True, True, True, False],
+        [True, False, False, True, True, True, False, True],
+        [True, False, False, True, True, True, True, True],
+    ]
     for use_sim_cs, use_sim_j, use_sim_d, use_file, use_social, use_temporal, use_pr_only, use_issue_only in configs:
         if not (use_sim_cs or use_sim_j or use_file or use_social or use_temporal or use_pr_only or use_issue_only):
             continue
@@ -34,13 +41,14 @@ if __name__ == '__main__':
         }
 
         for project in projects:
+            print(f"Working on {project}")
             try:
                 n_batches = 5
                 project_dir = location_format % project
                 with open(project_dir) as f:
                     repo = jsonpickle.decode(f.read())
 
-                with open(os.path.join(os.path.dirname(project_dir[:-5]), '..', 'tails',
+                with open(os.path.join(os.path.dirname(project_dir[:-5]),
                                        os.path.basename(project_dir)[:-len('.json')] + '_truth.json')) as f:
                     truth = jsonpickle.decode(f.read())
 
@@ -73,5 +81,5 @@ if __name__ == '__main__':
                                                       (i, use_issue_only, use_pr_only, use_temporal, use_sim_cs,
                                                        use_sim_j, use_file, use_social, under)), 'w') as f:
                             f.write(str(unk_rate))
-            except ValueError:
+            except ValueError as e:
                 print('Failed on %s' % project)
