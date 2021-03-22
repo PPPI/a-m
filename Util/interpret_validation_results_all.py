@@ -152,91 +152,112 @@ if __name__ == '__main__':
     with open(sys.argv[2]) as f:
         projects = [line.strip() for line in f.readlines()]
 
-    for project in projects:
-        exists = False
-        try:
-            with open((location_format[:-len('.json')] + '_results_interpreted_commits_MF_restricted.csv') % project) as f:
-                exists =len(f.read()) > 0
-        except FileNotFoundError:
-            pass
-        if not(exists):
+    configs = [
+        [True, False, False, True, True, True, False, False],
+        [True, False, False, True, True, True, True, False],
+        [True, False, False, True, True, True, False, True],
+        [True, False, False, True, True, True, True, True],
+    ]
+
+    for n, (
+            use_sim_cs, use_sim_j, use_sim_d, use_file, use_social, use_temporal, use_pr_only,
+            use_issue_only) in enumerate(
+        configs):
+        for project in projects:
+            exists = False
             try:
-                results_i = list()
-                for fold in [4]:
-                    with open((location_format[
-                               :-5] + '_RAW_i_results_f4_ioTrue_poTrue_tTrue_csTrue_jFalse_fFalse_sFalse_u1.txt') % project) as f:
-                        result_str = f.read()
-                    result = ast.literal_eval(result_str)
-                    results_i.append((fold, result))
-                results_i = dict(results_i)
-
-                results_p = list()
-                for fold in [4]:
-                    with open((location_format[
-                               :-5] + '_RAW_p_results_f4_ioTrue_poTrue_tTrue_csTrue_jFalse_fFalse_sFalse_u1.txt') % project) as f:
-                        result_str = f.read()
-                    result = ast.literal_eval(result_str)
-                    results_p.append((fold, result))
-                results_p = dict(results_p)
-
-                with open(os.path.join(os.path.dirname(location_format[:-5]), '..', 'tails',
-                                       os.path.basename(location_format)[:-len('.json')] + '_truth.json') % project) as f:
-                    truth = jsonpickle.decode(f.read())
-
-                truth_pr = dict()
-                for issue in truth.keys():
-                    for pr in truth[issue]:
-                        try:
-                            truth_pr[pr].add(issue)
-                        except KeyError:
-                            truth_pr[pr] = {issue}
-
+                with open((location_format[
+                           :-len('.json')] + '_results_interpreted_commits_MF_restricted_n%d.csv') % (project, n)) as f:
+                    exists = len(f.read()) > 0
+            except FileNotFoundError:
+                pass
+            if not (exists):
                 try:
-                    with open(os.path.join(os.path.dirname(location_format[:-5]), '..', 'tails',
-                                           os.path.basename(location_format)[:-len('.json')] + '_subsequent.json') % project) \
-                            as f:
-                        subseq_p = jsonpickle.decode(f.read())
+                    results_i = list()
+                    for fold in [4]:
+                        with open((location_format[
+                                   :-5] + ('_RAW_i_results_f%d_io%s_po%s_t%s_cs%s_j%s_f%s_s%s_u%d.txt' %
+                                           (4, use_issue_only, use_pr_only, use_temporal, use_sim_cs,
+                                            use_sim_j, use_file, use_social, 1))) % project) as f:
+                            result_str = f.read()
+                        result = ast.literal_eval(result_str)
+                        results_i.append((fold, result))
+                    results_i = dict(results_i)
 
-                    subseq_i = dict()
-                    for pr in subseq_p.keys():
-                        for issue in subseq_p[pr]:
+                    results_p = list()
+                    for fold in [4]:
+                        with open((location_format[
+                                   :-5] + ('_RAW_p_results_f%d_io%s_po%s_t%s_cs%s_j%s_f%s_s%s_u%d.txt' %
+                                           (4, use_issue_only, use_pr_only, use_temporal, use_sim_cs,
+                                            use_sim_j, use_file, use_social, 1))) % project) as f:
+                            result_str = f.read()
+                        result = ast.literal_eval(result_str)
+                        results_p.append((fold, result))
+                    results_p = dict(results_p)
+
+                    with open(os.path.join(os.path.dirname(location_format[:-5]),
+                                           os.path.basename(location_format)[
+                                           :-len('.json')] + '_truth.json') % project) as f:
+                        truth = jsonpickle.decode(f.read())
+
+                    truth_pr = dict()
+                    for issue in truth.keys():
+                        for pr in truth[issue]:
                             try:
-                                subseq_i[issue].add(pr)
+                                truth_pr[pr].add(issue)
                             except KeyError:
-                                subseq_i[issue] = {pr}
-                except FileNotFoundError:
-                    subseq_p = dict()
-                    subseq_i = dict()
+                                truth_pr[pr] = {issue}
 
-                data = {'Threshold': list(), 'K': list(), 'Hit-rate': list(), 'Average Precision': list(),
-                        'Mean Reciprocal Rank': list(), 'Discounted Cumulative Gain': list(),
-                        'False Positive Rate': list(), 'False Negative Rate': list(),
-                        'Subsequent Links Found': list(), 'Precision': list(), 'Recall': list()}
-                for fold in [4]:
-                    result_p = results_p[fold]
-                    result_i = results_i[fold]
-                    for th in np.arange(.0, 1., step=.01):
-                        for top_k in [1, 3, 5, 7, 10, 15, 20, 'inf']:
-                            hit, ap, mrr, dcg, fpr, fnr, sub_hit, p, r = evaluate_at_threshold(result_p, result_i, th, top_k,
-                                                                                         truth_pr, truth,
-                                                                                         subseq_i=subseq_i,
-                                                                                         subseq_p=subseq_p)
+                    try:
+                        with open(os.path.join(os.path.dirname(location_format[:-5]),
+                                               os.path.basename(location_format)[
+                                               :-len('.json')] + '_subsequent.json') % project) \
+                                as f:
+                            subseq_p = jsonpickle.decode(f.read())
 
-                            data['Threshold'].append(float('%.5f' % th))
-                            data['K'].append(top_k)
-                            data['Hit-rate'].append(hit)
-                            data['Average Precision'].append(ap)
-                            data['Mean Reciprocal Rank'].append(mrr)
-                            data['Discounted Cumulative Gain'].append(dcg)
-                            data['False Positive Rate'].append(fpr)
-                            data['False Negative Rate'].append(fnr)
-                            data['Subsequent Links Found'].append(sub_hit)
-                            data['Precision'].append(p)
-                            data['Recall'].append(r)
-                print('Writing %s' %
-                      ((location_format[:-len('.json')] + '_results_interpreted_MF_restricted.csv') % project))
-                pd.DataFrame(data=data).to_csv(
-                    (location_format[:-len('.json')] + '_results_interpreted_MF_restricted.csv') % project)
-            except Exception as e:
-                print('%s' % project)
-                print(str(e))
+                        subseq_i = dict()
+                        for pr in subseq_p.keys():
+                            for issue in subseq_p[pr]:
+                                try:
+                                    subseq_i[issue].add(pr)
+                                except KeyError:
+                                    subseq_i[issue] = {pr}
+                    except FileNotFoundError:
+                        subseq_p = dict()
+                        subseq_i = dict()
+
+                    data = {'Threshold': list(), 'K': list(), 'Hit-rate': list(), 'Average Precision': list(),
+                            'Mean Reciprocal Rank': list(), 'Discounted Cumulative Gain': list(),
+                            'False Positive Rate': list(), 'False Negative Rate': list(),
+                            'Subsequent Links Found': list(), 'Precision': list(), 'Recall': list()}
+                    for fold in [4]:
+                        result_p = results_p[fold]
+                        result_i = results_i[fold]
+                        for th in np.arange(.0, 1., step=.01):
+                            for top_k in [1, 3, 5, 7, 10, 15, 20, 'inf']:
+                                hit, ap, mrr, dcg, fpr, fnr, sub_hit, p, r = evaluate_at_threshold(result_p, result_i,
+                                                                                                   th, top_k,
+                                                                                                   truth_pr, truth,
+                                                                                                   subseq_i=subseq_i,
+                                                                                                   subseq_p=subseq_p)
+
+                                data['Threshold'].append(float('%.5f' % th))
+                                data['K'].append(top_k)
+                                data['Hit-rate'].append(hit)
+                                data['Average Precision'].append(ap)
+                                data['Mean Reciprocal Rank'].append(mrr)
+                                data['Discounted Cumulative Gain'].append(dcg)
+                                data['False Positive Rate'].append(fpr)
+                                data['False Negative Rate'].append(fnr)
+                                data['Subsequent Links Found'].append(sub_hit)
+                                data['Precision'].append(p)
+                                data['Recall'].append(r)
+                    print('Writing %s' %
+                          (location_format[
+                           :-len('.json')] + '_results_interpreted_commits_MF_restricted_n%d.csv') % (project, n))
+                    pd.DataFrame(data=data).to_csv(
+                        (location_format[
+                         :-len('.json')] + '_results_interpreted_commits_MF_restricted_n%d.csv') % (project, n))
+                except Exception as e:
+                    print('%s' % project)
+                    print(str(e))
