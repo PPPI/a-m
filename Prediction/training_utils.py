@@ -1,14 +1,21 @@
 import math
 import multiprocessing
+import numpy as np
 import random
+
+# Workaround in case of version mismatches
+import six
+import sys
+
+sys.modules['sklearn.externals.six'] = six
+
 from datetime import datetime, timedelta
+from gensim.corpora import Dictionary
+from gensim.models import tfidfmodel
 from multiprocessing.pool import Pool
 from random import shuffle
 from typing import List, Tuple, Union, Set, Dict, Any
 
-import numpy as np
-from gensim.corpora import Dictionary
-from gensim.models import tfidfmodel
 from skgarden import MondrianForestClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_selection import SelectFromModel, RFE
