@@ -1,4 +1,5 @@
 import random
+import sys
 import webbrowser as wb
 
 import jsonpickle
@@ -56,6 +57,7 @@ if __name__ == '__main__':
             issue_id = int(issue[1:])
             wb.open(url_format % (project.replace('_', '/'), issue_id))
             for other in truth[issue]:
+                wb.open(url_format % (project.replace('_', '/'), other[1:]))
                 hits[project].append(prompt_user_bool(f"Is {other} a true link?"))
 
     for project in projects:
