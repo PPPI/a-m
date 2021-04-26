@@ -1,3 +1,4 @@
+import json
 import random
 import sys
 import webbrowser as wb
@@ -62,3 +63,6 @@ if __name__ == '__main__':
 
     for project in projects:
         print('The GT accuracy over the sample is %2.3f' % np.mean(hits[project]))
+
+    with open('./gt_accuracy.json', 'w') as f:
+        f.write(json.dumps(hits))
