@@ -63,7 +63,7 @@ if __name__ == '__main__':
             hits[project].append(prompt_user_bool(f"Is {other[6:]} a true link?"))
 
     for project in projects:
-        print('The GT accuracy over the sample is %2.3f' % np.mean(hits[project]))
+        print('The prediction accuracy over the sample is %2.3f' % np.mean(hits[project]))
 
     with open('./gt_accuracy.json', 'w') as f:
         f.write(json.dumps(hits))
