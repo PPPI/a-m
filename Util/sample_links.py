@@ -47,6 +47,7 @@ if __name__ == '__main__':
         'palantir_plottable',
         'tensorflow_tensorflow',  # Dev set end
     ]
+    first_n = input('How many links should we sample?')
     hits = dict()
     for project in projects:
         hits[project] = list()
@@ -54,7 +55,12 @@ if __name__ == '__main__':
             truth = jsonpickle.decode(f.read())
         issues = random.sample(list(truth.keys()), 100)
 
-        for issue in issues:
+        if first_n == 'all':
+            first_n_actual = len(issues)
+        else:
+            first_n_actual = min(int(first_n), len(issues))
+
+        for issue in issues[:first_n_actual]:
             issue_id = int(issue[1:])
             wb.open(url_format % (project.replace('_', '/'), issue_id))
             for other in truth[issue]:
