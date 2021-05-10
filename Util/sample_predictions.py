@@ -57,13 +57,12 @@ if __name__ == '__main__':
 
         for result, other in results_sampled:
             issue_id = int(result[6:])
-            wb.open(url_format % (project.replace('_', '/'), issue_id))
             wb.open(url_format % (project.replace('_', '/'), int(other[6:])))
+            wb.open(url_format % (project.replace('_', '/'), issue_id))
             print(f"You are now considering {project}'s {issue_id}.")
             hits[project].append(prompt_user_bool(f"Is {other[6:]} a true link?"))
 
-    for project in projects:
         print(f"The prediction accuracy over the sample is {np.mean(hits[project]):2.3f} for project {project}.")
 
-    with open('./gt_accuracy.json', 'w') as f:
-        f.write(json.dumps(hits))
+        with open(f"./gt_accuracy_{project}.json", 'w') as f:
+            f.write(json.dumps(hits[project]))
