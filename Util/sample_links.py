@@ -2,6 +2,7 @@ import json
 import random
 import sys
 import webbrowser as wb
+from typing import Dict, Any, List, Tuple
 
 import jsonpickle
 import numpy as np
@@ -34,6 +35,10 @@ def prompt_user_bool(prompt_msg, default=None, options_map=None):
         print('%s not recognised as an option!' % prompt, file=sys.stderr)
 
 
+def flatten_dict_of_lists(dict_of_lists: Dict[Any, List[Any]]) -> List[Tuple[Any, Any]]:
+    return [(this, that) for this in dict_of_lists.keys() for that in dict_of_lists[this]]
+
+
 if __name__ == '__main__':
     random.seed(46513)  # Randomly generated on google.com for the range 42-65553
     url_format = 'https://www.github.com/%s/issues/%d'
@@ -44,31 +49,34 @@ if __name__ == '__main__':
         'ReactiveX_RxJava',
         'google_guava',
         'facebook_react',
-        'palantir_plottable',
-        'tensorflow_tensorflow',  # Dev set end
+        'palantir_plottable',  # Dev set end
     ]
     first_n = input('How many links should we sample?')
     hits = dict()
     for project in projects:
         hits[project] = list()
         with open((location_format[:-5] + '_truth.json') % project) as f:
-            truth = jsonpickle.decode(f.read())
-        issues = random.sample(list(truth.keys()), 100)
+            truth = flatten_dict_of_lists(jsonpickle.decode(f.read()))
+
+        if len(truth) > 100:
+            issues = random.sample(truth, 100)
+        else:
+            issues = truth
 
         if first_n == 'all':
             first_n_actual = len(issues)
         else:
             first_n_actual = min(int(first_n), len(issues))
 
-        for issue in issues[:first_n_actual]:
+        for issue, other in issues[:first_n_actual]:
             issue_id = int(issue[1:])
             wb.open(url_format % (project.replace('_', '/'), issue_id))
-            for other in truth[issue]:
-                wb.open(url_format % (project.replace('_', '/'), other[1:]))
-                hits[project].append(prompt_user_bool(f"Is {other} a true link?"))
+            wb.open(url_format % (project.replace('_', '/'), int(other[1:])))
+            print(f"You are now considering {project}'s {issue_id}.")
+            hits[project].append(prompt_user_bool(f"Is {other} a true link?"))
 
     for project in projects:
-        print('The GT accuracy over the sample is %2.3f' % np.mean(hits[project]))
+        print(f"The GT accuracy over the sample is {np.mean(hits[project]):2.3f} for project {project}.")
 
     with open('./gt_accuracy.json', 'w') as f:
         f.write(json.dumps(hits))
