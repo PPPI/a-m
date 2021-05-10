@@ -51,9 +51,14 @@ if __name__ == '__main__':
         'facebook_react',
         'palantir_plottable',  # Dev set end
     ]
-    first_n = input('How many links should we sample?')
+    first_n = input('How many links should we sample? ')
+    try:
+        skip_projects = int(input('How many projects should we skip? '))
+    except ValueError:
+        print('Got a non-numerical answer, skipping none.')
+        skip_projects = 0
     hits = dict()
-    for project in projects:
+    for project in projects[skip_projects:]:
         hits[project] = list()
         with open((location_format[:-5] + '_truth.json') % project) as f:
             truth = flatten_dict_of_lists(jsonpickle.decode(f.read()))

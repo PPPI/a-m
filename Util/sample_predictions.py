@@ -19,8 +19,14 @@ if __name__ == '__main__':
         'facebook_react',
         'palantir_plottable',  # Dev set end
     ]
+    first_n = input('How many links should we sample? ')
+    try:
+        skip_projects = int(input('How many projects should we skip? '))
+    except ValueError:
+        print('Got a non-numerical answer, skipping none.')
+        skip_projects = 0
     hits = dict()
-    for project in projects:
+    for project in projects[skip_projects:]:
         hits[project] = list()
         results_i = list()
         for fold in range(n_fold):
@@ -55,7 +61,7 @@ if __name__ == '__main__':
         else:
             results_sampled = results
 
-        for result, other in results_sampled:
+        for result, other in results_sampled[:first_n]:
             issue_id = int(result[6:])
             wb.open(url_format % (project.replace('_', '/'), int(other[6:])))
             wb.open(url_format % (project.replace('_', '/'), issue_id))
