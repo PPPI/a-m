@@ -58,7 +58,7 @@ if __name__ == '__main__':
         print('Got a non-numerical answer, skipping none.')
         skip_projects = 0
     hits = dict()
-    for project in projects[skip_projects:]:
+    for idx, project in enumerate(projects):
         hits[project] = list()
         with open((location_format[:-5] + '_truth.json') % project) as f:
             truth = flatten_dict_of_lists(jsonpickle.decode(f.read()))
@@ -67,6 +67,9 @@ if __name__ == '__main__':
             issues = random.sample(truth, 100)
         else:
             issues = truth
+
+        if idx < skip_projects:
+            continue
 
         if first_n == 'all':
             first_n_actual = len(issues)

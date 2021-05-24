@@ -26,7 +26,7 @@ if __name__ == '__main__':
         print('Got a non-numerical answer, skipping none.')
         skip_projects = 0
     hits = dict()
-    for project in projects[skip_projects:]:
+    for idx, project in enumerate(projects):
         hits[project] = list()
         results_i = list()
         for fold in range(n_fold):
@@ -60,6 +60,9 @@ if __name__ == '__main__':
             results_sampled = random.sample(results, 100)
         else:
             results_sampled = results
+
+        if idx < skip_projects:
+            continue
 
         for result, other in results_sampled[:first_n]:
             issue_id = int(result[6:])
