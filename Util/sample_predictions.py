@@ -19,7 +19,7 @@ if __name__ == '__main__':
         'facebook_react',
         'palantir_plottable',  # Dev set end
     ]
-    first_n = input('How many links should we sample? ')
+    first_n = int(input('How many links should we sample? '))
     try:
         skip_projects = int(input('How many projects should we skip? '))
     except ValueError:
@@ -55,6 +55,7 @@ if __name__ == '__main__':
             results[fold] = [(k, other_k) for k, v in results[fold].items() if len(v) > 0 for other_k in v]
 
         results = [inner for outer in results.values() for inner in outer]
+        results = {(p1, p2) if int(p1[6:]) < int(p2[6:]) else (p2, p1) for p1, p2 in results}
 
         if len(results) > 100:
             results_sampled = random.sample(results, 100)
