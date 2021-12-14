@@ -16,7 +16,7 @@ if __name__ == '__main__':
         'PhilJay_MPAndroidChart',
         'ReactiveX_RxJava',
         'google_guava',
-        'facebook_react',
+        # 'facebook_react',
         'palantir_plottable',  # Dev set end
     ]
     first_n = int(input('How many links should we sample? '))
@@ -55,12 +55,16 @@ if __name__ == '__main__':
             results[fold] = [(k, other_k) for k, v in results[fold].items() if len(v) > 0 for other_k in v]
 
         results = [inner for outer in results.values() for inner in outer]
-        results = {(p1, p2) if int(p1[6:]) < int(p2[6:]) else (p2, p1) for p1, p2 in results}
+        if project == "google_guava":
+            results = {(p1, p2) if int(p1[6:]) < int(p2[6:]) else (p2, p1) for p1, p2 in results
+                       if int(p1[6:]) != 2100 and int(p2[6:]) != 2100}
+        else:
+            results = {(p1, p2) if int(p1[6:]) < int(p2[6:]) else (p2, p1) for p1, p2 in results}
 
         if len(results) > 100:
             results_sampled = random.sample(results, 100)
         else:
-            results_sampled = results
+            results_sampled = list(results)
 
         if idx < skip_projects:
             continue
