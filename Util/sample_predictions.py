@@ -16,7 +16,7 @@ if __name__ == '__main__':
         'PhilJay_MPAndroidChart',
         'ReactiveX_RxJava',
         'google_guava',
-        # 'facebook_react',
+        'facebook_react',
         'palantir_plottable',  # Dev set end
     ]
     first_n = int(input('How many links should we sample? '))
