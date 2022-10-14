@@ -44,7 +44,7 @@ The crawling code is provided in `Prediction/gitScraper.py`.
 The backend can be used for replication as a standalone or it can be used together with a chrome plug-in.
 For the latter more details at: https://github.com/PPPI/am-chrome
 
-This work was done for the purpose of the following paper: https://github.com/PPPI/am-tex
+This work was done for the purpose of the following paper: [link](https://partachi.com/papers/am_just_accepted.pdf)
 
 ## Dependencies
 This project assumes Python 3.5 or newer.
